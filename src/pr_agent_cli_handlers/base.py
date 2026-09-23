@@ -175,10 +175,11 @@ class CliAIHandler(BaseAiHandler):
         if process.returncode != 0:
             detail_parts = []
             for label, stream in (("stderr", stderr), ("stdout", stdout)):
-                stream_tail = stream.decode("utf-8", errors="replace")[-2000:]
+                # Redact before cutting the tail, so the cut cannot leave part of a credential unmatched.
+                stream_tail = redact(stream.decode("utf-8", errors="replace"), secrets)[-2000:]
                 if stream_tail:
                     detail_parts.append(f"{label}: {stream_tail}")
-            detail = redact("; ".join(detail_parts), secrets)
+            detail = "; ".join(detail_parts)
             raise CliHandlerError(
                 f"{type(self).__name__}: {command.argv[0]} exited with {process.returncode}: {detail}")
         return redact(stdout.decode("utf-8", errors="replace"), secrets)

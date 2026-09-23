@@ -364,6 +364,18 @@ async def test_run_redacts_credential_values_from_output_and_errors(monkeypatch)
     assert "[REDACTED]" in str(exc_info.value)
 
 
+async def test_run_redacts_a_credential_that_straddles_the_start_of_the_error_tail(monkeypatch):
+    _install_settings(monkeypatch)
+    monkeypatch.setenv("ECHO_API_KEY", "echo-api-key-value")
+    handler = _RealProcessAdapter()
+    # Write 2008 characters, so the 2000-character tail the error keeps starts inside the credential.
+    failing = "import sys; sys.stderr.write('echo-api-key-value' + 'x' * 1990); sys.exit(1)"
+
+    with pytest.raises(CliHandlerError) as exc_info:
+        await handler._run(CliCommand(argv=[sys.executable, "-c", failing]))
+    assert "key-value" not in str(exc_info.value)
+
+
 async def test_run_starts_the_command_in_its_working_directory(monkeypatch, tmp_path):
     _install_settings(monkeypatch)
     handler = _RealProcessAdapter()

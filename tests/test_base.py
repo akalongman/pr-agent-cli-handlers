@@ -376,6 +376,77 @@ async def test_run_redacts_a_credential_that_straddles_the_start_of_the_error_ta
     assert "key-value" not in str(exc_info.value)
 
 
+_PRINT_KEY_AS_JSON = (
+    "import json, os, sys; "
+    "print(json.dumps({'is_error': sys.argv[1] == 'error', 'result': 'key: ' + os.environ['ECHO_API_KEY']}))"
+)
+# JSON escapes a quote or a backslash, so the raw-stdout redaction in _run cannot match these credentials.
+_ESCAPED_SECRETS = pytest.mark.parametrize("secret", ['pa"ssword-value', "pa\\ssword-value"],
+                                           ids=["quote", "backslash"])
+
+
+class _JsonProcessAdapter(_RealProcessAdapter):
+    """Decode a real child's JSON output, as the adapters decode their CLI's output."""
+    outcome = "ok"
+    raised = None
+
+    def build_command(self, model, system, user):
+        return CliCommand(argv=[sys.executable, "-c", _PRINT_KEY_AS_JSON, self.outcome])
+
+    def parse_response(self, stdout):
+        data = json.loads(stdout)
+        if data["is_error"]:
+            self.raised = CliHandlerError(f"echo reported an error: {data['result']}")
+            raise self.raised
+        return CliResponse(text=data["result"])
+
+
+class _JsonFieldParserAdapter(_JsonProcessAdapter):
+    def parse_response(self, stdout):
+        raise ValueError(f"unexpected result {json.loads(stdout)['result']}")
+
+
+@_ESCAPED_SECRETS
+async def test_chat_completion_redacts_a_json_escaped_credential_from_the_text_and_the_log(monkeypatch, secret):
+    _install_settings(monkeypatch)
+    monkeypatch.setenv("ECHO_API_KEY", secret)
+    logged = []
+    monkeypatch.setattr(cli_module, "get_logger", lambda: SimpleNamespace(
+        debug=lambda *a, **kw: None, info=lambda msg, **kw: logged.append(kw)))
+    assert secret not in json.dumps(secret)
+
+    text, _ = await _JsonProcessAdapter().chat_completion(model="m", system="s", user="u")
+
+    assert text == "key: [REDACTED]"
+    assert [entry["response"] for entry in logged] == ["key: [REDACTED]"]
+
+
+@_ESCAPED_SECRETS
+async def test_chat_completion_redacts_a_json_escaped_credential_from_a_reported_error(monkeypatch, secret):
+    _install_settings(monkeypatch)
+    monkeypatch.setenv("ECHO_API_KEY", secret)
+    handler = _JsonProcessAdapter()
+    handler.outcome = "error"
+
+    with pytest.raises(CliHandlerError) as exc_info:
+        await handler.chat_completion(model="m", system="s", user="u")
+
+    assert exc_info.value is handler.raised
+    assert str(exc_info.value) == "echo reported an error: key: [REDACTED]"
+
+
+@_ESCAPED_SECRETS
+async def test_chat_completion_redacts_a_json_escaped_credential_from_a_parse_failure(monkeypatch, secret):
+    _install_settings(monkeypatch)
+    monkeypatch.setenv("ECHO_API_KEY", secret)
+
+    with pytest.raises(CliHandlerError) as exc_info:
+        await _JsonFieldParserAdapter().chat_completion(model="m", system="s", user="u")
+
+    assert secret not in str(exc_info.value)
+    assert "unexpected result key: [REDACTED]" in str(exc_info.value)
+
+
 async def test_run_starts_the_command_in_its_working_directory(monkeypatch, tmp_path):
     _install_settings(monkeypatch)
     handler = _RealProcessAdapter()

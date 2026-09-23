@@ -131,13 +131,20 @@ class CliAIHandler(BaseAiHandler):
                     "the prompt does not fit in one argv element")
         get_logger().debug("Prompts", artifact={"system": system, "user": user})
         stdout = await self._run(command)
+        # Redact again after parsing: JSON escaping (a quote, a backslash) hides a credential from the redaction
+        # _run applies to the raw stdout, and decoding restores the plain value.
+        secrets = self.credential_values()
         try:
             response = self.parse_response(stdout)
-        except CliHandlerError:
+        except CliHandlerError as e:
+            # Redact the message in place and re-raise the same object the adapter raised.
+            e.args = tuple(redact(arg, secrets) if isinstance(arg, str) else arg for arg in e.args)
             raise
         except Exception as e:
-            raise CliHandlerError(
-                f"{type(self).__name__}: cannot parse the output of {command.argv[0]}: {type(e).__name__}: {e}") from e
+            raise CliHandlerError(redact(
+                f"{type(self).__name__}: cannot parse the output of {command.argv[0]}: {type(e).__name__}: {e}",
+                secrets)) from e
+        response.text = redact(response.text, secrets)
         get_logger().info("AI response", response=response.text, finish_reason=response.finish_reason,
                           model=mapped_model, prompt_tokens=response.prompt_tokens,
                           completion_tokens=response.completion_tokens)

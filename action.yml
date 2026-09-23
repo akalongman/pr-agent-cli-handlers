@@ -1,0 +1,51 @@
+name: "PR-Agent through agent CLIs"
+description: "Run PR-Agent reviews through the Claude Code or Codex CLI instead of LiteLLM API calls"
+branding:
+  icon: "check-circle"
+  color: "blue"
+inputs:
+  handler:
+    description: "CLI handler: claude_code or codex"
+    required: true
+  model:
+    description: "Model for PR-Agent (config.model); must be a model the selected CLI accepts"
+    required: true
+  cli-version:
+    description: "CLI version; empty uses the pinned version for claude_code and codex"
+    required: false
+    default: ""
+  package-version:
+    description: "pr-agent-cli-handlers version to install; empty installs the latest release"
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: Install pr-agent-cli-handlers
+      shell: bash
+      env:
+        PACKAGE_VERSION: ${{ inputs.package-version }}
+      run: pip install "pr-agent-cli-handlers${PACKAGE_VERSION:+==$PACKAGE_VERSION}"
+    - name: Install the agent CLI
+      shell: bash
+      env:
+        HANDLER: ${{ inputs.handler }}
+        CLI_VERSION: ${{ inputs.cli-version }}
+      run: |
+        case "$HANDLER" in
+          claude_code) npm install -g "@anthropic-ai/claude-code@${CLI_VERSION:-2.1.280}" ;;
+          codex) npm install -g "@openai/codex@${CLI_VERSION:-0.156.1}" ;;
+          *) echo "unknown handler: $HANDLER" >&2; exit 2 ;;
+        esac
+    - name: Run PR-Agent
+      shell: bash
+      env:
+        PR_AGENT_CLI_HANDLER: ${{ inputs.handler }}
+        CONFIG__MODEL: ${{ inputs.model }}
+      run: pr-agent-cli-handlers action

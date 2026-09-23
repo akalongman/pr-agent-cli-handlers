@@ -1,0 +1,29 @@
+# Include with `include: remote: https://raw.githubusercontent.com/akalongman/pr-agent-cli-handlers/<tag>/templates/gitlab-ci.yml`
+# or copy this job. Set GITLAB_PERSONAL_ACCESS_TOKEN and the CLI credential as masked, protected CI/CD variables.
+pr-agent-cli-handlers:
+  stage: test
+  image: node:22-bookworm
+  variables:
+    PR_AGENT_CLI_HANDLER: claude_code
+    CONFIG__MODEL: claude-sonnet-5
+    CLI_VERSION: ""
+    PACKAGE_VERSION: ""
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv tool install --python 3.12 "pr-agent-cli-handlers${PACKAGE_VERSION:+==$PACKAGE_VERSION}"
+    - |
+      case "$PR_AGENT_CLI_HANDLER" in
+        claude_code) npm install -g "@anthropic-ai/claude-code@${CLI_VERSION:-2.1.280}" ;;
+        codex) npm install -g "@openai/codex@${CLI_VERSION:-0.156.1}" ;;
+        *) echo "unknown handler: $PR_AGENT_CLI_HANDLER" >&2; exit 2 ;;
+      esac
+    - export MR_URL="$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID"
+    - export gitlab__url="$CI_SERVER_PROTOCOL://$CI_SERVER_FQDN"
+    - export gitlab__PERSONAL_ACCESS_TOKEN="$GITLAB_PERSONAL_ACCESS_TOKEN"
+    - export config__git_provider="gitlab"
+    - pr-agent-cli-handlers --pr_url="$MR_URL" describe
+    - pr-agent-cli-handlers --pr_url="$MR_URL" review
+    - pr-agent-cli-handlers --pr_url="$MR_URL" improve

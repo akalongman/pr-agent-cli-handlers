@@ -122,6 +122,22 @@ async def test_chat_completion_raises_cli_handler_error_on_non_numeric_usage(mon
     assert isinstance(exc_info.value.__cause__, ValueError)
 
 
+@pytest.mark.parametrize("result", [42, {"summary": "looks good"}], ids=["number", "object"])
+async def test_chat_completion_raises_cli_handler_error_on_a_non_string_result(monkeypatch, result):
+    _install_settings(monkeypatch)
+    # Give redaction a credential to look for, so a number reaches the same path as in a real run.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-sentinel-key")
+    handler = ClaudeCodeAIHandler()
+
+    async def fake_run(command):
+        return _success_payload(result=result)
+
+    monkeypatch.setattr(handler, "_run", fake_run)
+
+    with pytest.raises(CliHandlerError, match="ClaudeCodeAIHandler"):
+        await handler.chat_completion(model="anthropic/claude-opus-5", system="s", user="u")
+
+
 def test_claude_code_names_its_credential_and_config_variables():
     assert ClaudeCodeAIHandler.credential_env == {
         "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",

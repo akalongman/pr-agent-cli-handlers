@@ -136,6 +136,9 @@ class CliAIHandler(BaseAiHandler):
         secrets = self.credential_values()
         try:
             response = self.parse_response(stdout)
+            # Refuse non-text here, inside the guard: redaction needs a str, and callers expect text back.
+            if not isinstance(response.text, str):
+                raise TypeError(f"parse_response returned {type(response.text).__name__} text, not str")
         except CliHandlerError as e:
             # Redact the message in place and re-raise the same object the adapter raised.
             e.args = tuple(redact(arg, secrets) if isinstance(arg, str) else arg for arg in e.args)

@@ -156,6 +156,18 @@ async def test_parse_failure_surfaces_as_cli_handler_error(monkeypatch):
     assert isinstance(exc_info.value.__cause__, ValueError)
 
 
+class _NonTextParserAdapter(_EchoAdapter):
+    def parse_response(self, stdout):
+        return CliResponse(text={"summary": "looks good"})
+
+
+async def test_non_string_text_from_parse_response_surfaces_as_cli_handler_error(monkeypatch):
+    _install_settings(monkeypatch)
+
+    with pytest.raises(CliHandlerError, match="_NonTextParserAdapter.*not str"):
+        await _NonTextParserAdapter().chat_completion(model="m", system="s", user="u")
+
+
 async def test_cli_handler_error_from_parse_response_propagates_unwrapped(monkeypatch):
     _install_settings(monkeypatch)
     reported = CliHandlerError("reported failure")

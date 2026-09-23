@@ -103,10 +103,35 @@ def test_parse_response_raises_on_turn_failed(monkeypatch):
         CodexAIHandler().parse_response(_events({"type": "turn.failed", "error": {"message": "quota exceeded"}}))
 
 
-def test_parse_response_raises_on_error_event(monkeypatch):
+def test_parse_response_names_the_last_error_when_no_agent_message_follows(monkeypatch):
     _install_settings(monkeypatch)
-    with pytest.raises(CliHandlerError, match="bad request"):
-        CodexAIHandler().parse_response(_events({"type": "error", "message": "bad request"}))
+    with pytest.raises(CliHandlerError) as exc_info:
+        CodexAIHandler().parse_response(_events({"type": "error", "message": "Reconnecting 1/5"}))
+    assert str(exc_info.value) == "Codex produced no agent message (last error: Reconnecting 1/5)"
+
+
+def test_parse_response_continues_past_a_stream_retry_error(monkeypatch):
+    _install_settings(monkeypatch)
+    stdout = _events(
+        {"type": "error", "message": "Reconnecting 1/5"},
+        {"type": "item.completed", "item": {"id": "i1", "type": "agent_message", "text": "review text"}},
+        {"type": "turn.completed", "usage": {"input_tokens": 20, "output_tokens": 5, "reasoning_output_tokens": 2}},
+    )
+    response = CodexAIHandler().parse_response(stdout)
+
+    assert response.text == "review text"
+    assert response.prompt_tokens == 20
+    assert response.completion_tokens == 7
+
+
+def test_parse_response_raises_on_turn_failed_after_a_stream_retry_error(monkeypatch):
+    _install_settings(monkeypatch)
+    stdout = _events(
+        {"type": "error", "message": "Reconnecting 1/5"},
+        {"type": "turn.failed", "error": {"message": "stream disconnected before completion"}},
+    )
+    with pytest.raises(CliHandlerError, match="stream disconnected before completion"):
+        CodexAIHandler().parse_response(stdout)
 
 
 def test_parse_response_raises_without_an_agent_message(monkeypatch):

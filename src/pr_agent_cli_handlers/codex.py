@@ -69,7 +69,7 @@ class CodexAIHandler(CliAIHandler):
         return CliCommand(argv=argv, stdin=user)
 
     def parse_response(self, stdout: str) -> CliResponse:
-        text = None
+        text = last_error = None
         prompt_tokens = completion_tokens = 0
         for line in stdout.splitlines():
             line = line.strip()
@@ -83,8 +83,12 @@ class CodexAIHandler(CliAIHandler):
                 continue
             kind = event.get("type")
             if kind in ("error", "turn.failed"):
-                detail = event.get("message") or event.get("error") or event
-                raise CliHandlerError(f"Codex reported a failure: {str(detail)[:500]}")
+                detail = str(event.get("message") or event.get("error") or event)[:500]
+                if kind == "turn.failed":
+                    raise CliHandlerError(f"Codex reported a failure: {detail}")
+                # Keep the message only: Codex prints an error event for each transient stream retry and goes on.
+                last_error = detail
+                continue
             item = event.get("item")
             if kind == "item.completed" and isinstance(item, dict) and item.get("type") == "agent_message":
                 text = item.get("text") or ""
@@ -95,5 +99,8 @@ class CodexAIHandler(CliAIHandler):
                 completion_tokens = (int(usage.get("output_tokens") or 0)
                                      + int(usage.get("reasoning_output_tokens") or 0))
         if text is None:
-            raise CliHandlerError("Codex produced no agent message")
+            message = "Codex produced no agent message"
+            if last_error:
+                message += f" (last error: {last_error})"
+            raise CliHandlerError(message)
         return CliResponse(text=text, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)

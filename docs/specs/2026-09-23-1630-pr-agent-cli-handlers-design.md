@@ -157,7 +157,7 @@ codex --ask-for-approval never --sandbox read-only --model <model>
 
 - **Input and working directory:** the user prompt goes on standard input. The empty working directory is created once per handler instance and removed on garbage collection.
 - **Effort:** `low` to `max` pass through; `none` and `minimal` become `low`.
-- **Output:** the parser raises on the first `error` or `turn.failed` event.
+- **Output:** the parser raises on a `turn.failed` event or a missing agent message. `error` events are transient stream retries; the parser keeps only the last one's message, for the missing-message error.
 - **Tool access:** the read-only sandbox alone blocks writes and network access but not reads. The `features.*=false` switches remove the shell, command execution, browser, computer-use, apps, plugins and image tools; with them the Codex 0.156.1 prompt shrank from 30,660 to 12,656 input tokens (P4).
 
 **`agy` adapter (experimental; probes P1 to P3 decide whether it ships, P4 decides its trust guidance):**

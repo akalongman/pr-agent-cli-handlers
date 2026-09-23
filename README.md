@@ -24,7 +24,7 @@ The CLI you choose must be installed and logged in on the same machine.
 | macOS | `brew install uv && uv tool install pr-agent-cli-handlers` | `npm install -g @anthropic-ai/claude-code` | `npm install -g @openai/codex` |
 | Linux (Debian, Ubuntu) | `curl -LsSf https://astral.sh/uv/install.sh \| sh && uv tool install pr-agent-cli-handlers` | `npm install -g @anthropic-ai/claude-code` | `npm install -g @openai/codex` |
 | Linux (other) | `pipx install pr-agent-cli-handlers` (Python 3.12 or later) | as above | as above |
-| Windows (PowerShell) | `powershell -c "irm https://astral.sh/uv/install.ps1 \| iex"; uv tool install pr-agent-cli-handlers` | `npm install -g @anthropic-ai/claude-code` | `npm install -g @openai/codex` |
+| Windows (PowerShell) | native Windows is untested and not supported in 0.1.0: run `wsl --install`, then follow the WSL row | use WSL | use WSL |
 | WSL | follow the Linux rows inside your WSL distribution | as Linux | as Linux |
 
 ## Quick start
@@ -87,7 +87,7 @@ on:
   issue_comment:
 jobs:
   pr_agent_job:
-    if: ${{ github.event.sender.type != 'Bot' }}
+    if: ${{ github.event.sender.type != 'Bot' && (github.event_name != 'issue_comment' || (github.event.issue.pull_request && startsWith(github.event.comment.body, '/'))) }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -105,15 +105,21 @@ jobs:
           CONFIG__FALLBACK_MODELS: '["claude-opus-5"]'
 ```
 
+The condition starts a run for a comment only on a pull request and only when the comment starts with `/`; an
+unknown slash command (a typo such as `/reviwe`) fails the run, unlike a failed review.
+
 `pull_request` gives fork pull requests no secrets, so they are skipped. `pull_request_target` would review
 them with secrets present; the action never checks out pull request code, but a fork's diff can still carry
 instructions aimed at the reviewer. Use it only with the Claude Code or Codex handler.
 
 ## GitLab
 
-Include `templates/gitlab-ci.yml` from a release tag, or copy its job, and set these masked, protected CI/CD
-variables: `GITLAB_PERSONAL_ACCESS_TOKEN` and the CLI credential (for example `CLAUDE_CODE_OAUTH_TOKEN`). Do not
-run parent-project pipelines for merge requests from forks while these variables are present.
+Include `templates/gitlab-ci.yml` from a release tag, or copy its job, and set these masked CI/CD variables (and
+hidden, where GitLab offers it): `GITLAB_PERSONAL_ACCESS_TOKEN` and the CLI credential (for example
+`CLAUDE_CODE_OAUTH_TOKEN`). Protecting them is a trade-off: a merge request pipeline receives protected variables
+only when the project allows merge request pipelines to access them and both source and target branches are
+protected, while an unprotected variable can be read by anyone who can push a branch, through a modified pipeline.
+Do not run parent-project pipelines for merge requests from forks while these variables are present.
 
 ## Security
 

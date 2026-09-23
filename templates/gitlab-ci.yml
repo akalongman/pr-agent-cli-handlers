@@ -1,8 +1,11 @@
 # Include with `include: remote: https://raw.githubusercontent.com/akalongman/pr-agent-cli-handlers/<tag>/templates/gitlab-ci.yml`
-# or copy this job. Set GITLAB_PERSONAL_ACCESS_TOKEN and the CLI credential as masked, protected CI/CD variables.
+# or copy this job. Set GITLAB_PERSONAL_ACCESS_TOKEN and the CLI credential as masked CI/CD variables (and hidden,
+# where GitLab offers it). Protecting them is a trade-off: a merge request pipeline receives protected variables
+# only when the project allows merge request pipelines to access them and both source and target branches are
+# protected, while an unprotected variable can be read by anyone who can push a branch, through a modified pipeline.
 pr-agent-cli-handlers:
   stage: test
-  image: node:22-bookworm
+  image: node:24-trixie
   variables:
     PR_AGENT_CLI_HANDLER: claude_code
     CONFIG__MODEL: claude-sonnet-5

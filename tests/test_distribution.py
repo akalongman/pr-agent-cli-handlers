@@ -20,7 +20,7 @@ def test_gitlab_template_runs_on_merge_request_pipelines():
     template = yaml.safe_load((ROOT / "templates" / "gitlab-ci.yml").read_text())
     job = template["pr-agent-cli-handlers"]
     assert job["rules"] == [{"if": '$CI_PIPELINE_SOURCE == "merge_request_event"'}]
-    assert job["image"] == "node:22-bookworm"
+    assert job["image"] == "node:24-trixie"
     script = "\n".join(job["script"])
     for command in ("describe", "review", "improve"):
         assert f'pr-agent-cli-handlers --pr_url="$MR_URL" {command}' in script

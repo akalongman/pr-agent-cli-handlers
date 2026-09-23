@@ -210,7 +210,7 @@ Everything else is dropped: the git provider tokens PR-Agent uses (`GITHUB_TOKEN
   4. run `pr-agent-cli-handlers action`
 
   Inputs: handler, CLI version, model. Credentials come from secrets through `env`. The documented triggers are `pull_request` and `issue_comment`, so fork pull requests receive no secrets and are skipped. `pull_request_target` is documented as an explicit opt-in: the action never checks out pull request code, but a fork's diff can still carry prompt-injection text.
-- **GitLab pipelines.** A versioned template (`templates/gitlab-ci.yml`), usable with `include: remote:` or copied. It runs on `node:22-bookworm` for `merge_request_event` (Node for the npm-installed CLIs), installs uv, which provides Python 3.12, then installs the package and the selected CLI, and runs `describe`, `review` and `improve` against `$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID`, exactly as PR-Agent's own pipeline mode does.
+- **GitLab pipelines.** A versioned template (`templates/gitlab-ci.yml`), usable with `include: remote:` or copied. It runs on `node:24-trixie` for `merge_request_event` (Node for the npm-installed CLIs), installs uv, which provides Python 3.12, then installs the package and the selected CLI, and runs `describe`, `review` and `improve` against `$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID`, exactly as PR-Agent's own pipeline mode does.
 
 ### Credentials and compliance
 
@@ -234,7 +234,7 @@ Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/
 |---|---|---|
 | Credential exfiltration through review text | Prompt injection in the diff asks the agent to print its environment or read a credential file, and the response is posted to the pull request | Claude Code runs with tools off; Codex runs with its tool features switched off (P4). The child environment is allowlisted (R9). Responses are redacted (R10). `agy` keeps tool access, web search included (P3, P4), and is not selectable |
 | Repository configuration steering the CLI | `.pr_agent.toml` in the pull request | Handler settings are read from the environment only (R6). Model names are validated (R7) |
-| Secrets in fork pipelines | CI trigger choice | The documented triggers are `pull_request` and `issue_comment`, plus GitLab protected and masked variables. Running parent pipelines for fork merge requests is warned against |
+| Secrets in fork pipelines | CI trigger choice | The documented triggers are `pull_request` and `issue_comment`, plus GitLab masked variables (hidden where GitLab offers it), with the trade-off of protecting them documented. Running parent pipelines for fork merge requests is warned against |
 | Supply chain of the CLI | Installer fetched at job start | Versions are pinned by default |
 | Subscription token misuse | A leaked token cannot be scoped or capped | Documentation recommends API keys with spending limits for shared repositories |
 | Process list exposure | The system prompt is an argument for Claude Code and Codex | Accepted. The system prompt is PR-Agent's template plus pull request metadata; credentials never appear in arguments |
@@ -260,7 +260,7 @@ Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/
 - Semantic versioning from 0.1.0, with a `CHANGELOG.md`.
 - A tag triggers a GitHub Actions workflow that publishes to PyPI through trusted publishing (OIDC); no PyPI token is stored.
 - The composite action and the GitLab template are referenced by the same tag.
-- The README covers installation on macOS, Linux, Windows and WSL, the credentials table, the security model and the compliance notes.
+- The README covers installation on macOS, Linux, Windows and WSL, the credentials table, the security model and the compliance notes. Native Windows is not supported in 0.1.0 and WSL is; the README's Windows row says so.
 
 ## Probes
 

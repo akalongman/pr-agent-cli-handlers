@@ -44,18 +44,27 @@ def read_extra_args(environ: Mapping[str, str]) -> list[str]:
         raise CliHandlerError(f"cannot parse {EXTRA_ARGS_VAR}: {e}") from e
 
 
-def read_timeout(environ: Mapping[str, str], fallback: float) -> float:
-    """Return PR_AGENT_CLI_TIMEOUT in seconds, or ``fallback`` when it is unset or blank."""
+def read_timeout(environ: Mapping[str, str], fallback: float | str) -> float:
+    """Return PR_AGENT_CLI_TIMEOUT in seconds, or ``fallback`` when it is unset or blank.
+
+    Pass the raw config.ai_timeout setting as ``fallback``: an int, a float or a numeric string. A repository's
+    .pr_agent.toml can set it, so check it like the variable, and only when it is used.
+    """
     raw = environ.get(TIMEOUT_VAR, "").strip()
-    if not raw:
-        return float(fallback)
+    if raw:
+        return _positive_seconds(raw, TIMEOUT_VAR)
+    return _positive_seconds(fallback, "config.ai_timeout")
+
+
+def _positive_seconds(value: object, source: str) -> float:
+    """Return ``value`` as seconds; raise CliHandlerError naming ``source`` unless it is a positive finite number."""
     try:
-        value = float(raw)
-    except ValueError as e:
-        raise CliHandlerError(f"{TIMEOUT_VAR} must be a positive number of seconds, got {raw!r}") from e
-    if not math.isfinite(value) or value <= 0:
-        raise CliHandlerError(f"{TIMEOUT_VAR} must be a positive number of seconds, got {raw!r}")
-    return value
+        seconds = float(value)
+    except (TypeError, ValueError, OverflowError):
+        seconds = math.nan
+    if isinstance(value, bool) or not math.isfinite(seconds) or seconds <= 0:
+        raise CliHandlerError(f"{source} must be a positive number of seconds, got {value!r}")
+    return seconds
 
 
 def read_pass_env(environ: Mapping[str, str]) -> list[str]:

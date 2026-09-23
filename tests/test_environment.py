@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from pr_agent_cli_handlers.environment import (
@@ -57,6 +59,29 @@ def test_read_timeout_falls_back_when_unset_or_blank():
 def test_read_timeout_rejects_values_that_are_not_positive_finite_numbers(raw):
     with pytest.raises(CliHandlerError, match=TIMEOUT_VAR):
         read_timeout({TIMEOUT_VAR: raw}, 120)
+
+
+@pytest.mark.parametrize("fallback", [
+    0, -1, -0.5, "0", "-1", "abc", "", " ", None, True, math.nan, math.inf, -math.inf, "nan", "inf", "1e309",
+    pytest.param(10**400, id="int-too-large-for-float"),
+])
+def test_read_timeout_rejects_a_fallback_that_is_not_a_positive_finite_number(fallback):
+    with pytest.raises(CliHandlerError, match=r"config\.ai_timeout"):
+        read_timeout({}, fallback)
+    with pytest.raises(CliHandlerError, match=r"config\.ai_timeout"):
+        read_timeout({TIMEOUT_VAR: " "}, fallback)
+
+
+@pytest.mark.parametrize("fallback", [0, -1, math.inf, math.nan, "abc", None])
+def test_read_timeout_prefers_a_valid_variable_over_an_invalid_fallback(fallback):
+    assert read_timeout({TIMEOUT_VAR: "30"}, fallback) == 30.0
+
+
+def test_read_timeout_accepts_an_int_or_a_numeric_string_fallback():
+    for fallback, expected in [(120, 120.0), ("45.5", 45.5), (" 90 ", 90.0), ("1e3", 1000.0)]:
+        value = read_timeout({}, fallback)
+        assert value == expected
+        assert type(value) is float
 
 
 def test_read_pass_env_trims_names_and_skips_empty_entries():

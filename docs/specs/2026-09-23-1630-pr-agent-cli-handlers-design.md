@@ -4,7 +4,7 @@ Status: draft for review. Date: 2026-09-23.
 
 ## Summary
 
-`pr-agent-cli-handlers` is an add-on package for [PR-Agent](https://github.com/The-PR-Agent/pr-agent). It runs PR-Agent's tools through a local agent command-line tool (the Claude Code CLI, the OpenAI Codex CLI, and experimentally the Antigravity CLI `agy`) instead of LiteLLM API calls. A user can review pull requests and merge requests with a subscription they already pay for, or with an API key, locally or in their own CI, with no server and no fork of PR-Agent.
+`pr-agent-cli-handlers` is an add-on package for [PR-Agent](https://github.com/The-PR-Agent/pr-agent). It runs PR-Agent's tools through a local agent command-line tool (the Claude Code CLI or the OpenAI Codex CLI; an experimental adapter for the Antigravity CLI `agy` is included but not selectable) instead of LiteLLM API calls. A user can review pull requests and merge requests with a subscription they already pay for, or with an API key, locally or in their own CI, with no server and no fork of PR-Agent.
 
 ## Background
 
@@ -51,7 +51,7 @@ A follow-up comment argued for part 1 together with a `register_ai_handler` hook
 - **R2.** `pr-agent-cli-handlers [arguments]` behaves like `pr-agent [arguments]` with the selected CLI handler. `pr-agent-cli-handlers action` runs PR-Agent's GitHub Action runner with it.
 - **R3.** Activation replaces the `ai_handler` default of every constructor listed under [Activation](#activation), only inside the process the command starts.
 - **R4.** Before activation, a seam check exits with status 2 if `PRAgent`, `PRReviewer`, `PRDescription` or `PRCodeSuggestions` lacks an `ai_handler` parameter whose default is `LiteLLMAIHandler`. The message names the constructor and the installed PR-Agent version. The same condition on any other listed constructor logs a warning.
-- **R5.** `PR_AGENT_CLI_HANDLER` selects the adapter: `claude_code`, `codex` or `agy`. Any other value, or none, exits with status 2 before PR-Agent starts, listing the valid values.
+- **R5.** `PR_AGENT_CLI_HANDLER` selects the adapter: `claude_code` or `codex`, and `agy` once P3 passes. Any other value, or none, exits with status 2 before PR-Agent starts, listing the valid values.
 - **R6.** Handler settings come from the process environment only, never from PR-Agent's settings object, so a repository's `.pr_agent.toml` cannot reach them. See [Configuration](#configuration).
 - **R7.** A model name must match `^[A-Za-z0-9][A-Za-z0-9._:/@-]*$` before any adapter-specific check. PR-Agent lets a repository set `config.model`, including per directory.
 - **R8.** Every failure raises `CliHandlerError`: invalid configuration, launch (missing binary, permission, argument too long, NUL byte in an argument), timeout, non-zero exit and unparseable output. PR-Agent's fallback loop then moves to the next model.
@@ -108,7 +108,7 @@ An explicit command was chosen over a `.pth` start-up hook. The hook would activ
 
 | Variable | Meaning | Default |
 |---|---|---|
-| `PR_AGENT_CLI_HANDLER` | `claude_code`, `codex` or `agy` | required |
+| `PR_AGENT_CLI_HANDLER` | `claude_code` or `codex`; `agy` once P3 passes | required |
 | `PR_AGENT_CLI_BINARY` | CLI executable name or path | `claude`, `codex` or `agy` |
 | `PR_AGENT_CLI_EXTRA_ARGS` | extra CLI arguments, split with `shlex.split`; an unparseable value raises `CliHandlerError` naming the variable | empty |
 | `PR_AGENT_CLI_TIMEOUT` | seconds per call, a positive number; any other non-empty value raises `CliHandlerError` naming the variable | `config.ai_timeout` |
@@ -161,22 +161,30 @@ codex --ask-for-approval never --sandbox read-only --model <model>
 - **Output:** the parser raises on a `turn.failed` event or a missing agent message. `error` events are transient stream retries; the parser keeps only the last one's message, for the missing-message error.
 - **Tool access:** the read-only sandbox alone blocks writes and network access but not reads. The `features.*=false` switches remove the shell, command execution, browser, computer-use, apps, plugins and image tools; with them the Codex 0.156.1 prompt shrank from 30,660 to 12,656 input tokens (P4).
 
-**`agy` adapter (experimental; probes P1 to P3 decide whether it ships, P4 decides its trust guidance):**
+**`agy` adapter (experimental; not selectable, because it failed P3 on 1.2.9; P4 decides its trust guidance):**
 
 ```
 agy --disable-slash-commands --sandbox --input-format stream-json --output-format stream-json
-    --model <model> [--effort low|medium|high] [extra args]
+    --model <model> [extra args]
 ```
 
 - **No `-p`:** `-p` takes the prompt as its value, and `--input-format stream-json` refuses a command-line prompt. The stream-json form runs one turn per input line and needs no `-p` (P2).
 - **Input:** standard input carries one line, `{"event": "user", "message": {"content": "<system>\n\n<user>"}}`. `agy` has no system-prompt override (feature requests [#50](https://github.com/google-antigravity/antigravity-cli/issues/50) and [#892](https://github.com/google-antigravity/antigravity-cli/issues/892) are open), so PR-Agent's system prompt is prepended to the message.
 - **Slash commands:** `--disable-slash-commands`, so text such as `/review` inside a prompt is not expanded.
 - **Working directory:** an empty temporary directory, as for Codex.
-- **Effort:** `low`, `medium` and `high` pass through; `xhigh` and `max` become `high`; `none` and `minimal` become `low`.
+- **Effort:** never passed. On 1.2.9, `--effort` conflicts with a model name that carries an effort (`gemini-3.8-flash-high`), and the models whose names carry none (`claude-sonnet-4-6`, `claude-opus-4-6-thinking`) reject it as unsupported. The model name selects the effort.
 - **Output:** newline-delimited JSON. The line whose `event` is `result` carries `result.status`, `result.response`, `result.error` and `result.usage`. A missing result line, or a `status` other than `SUCCESS`, raises with the status and `error` named. Tokens map as `prompt = usage.input_tokens` and `completion = usage.output_tokens` (`total_tokens` equals their sum; thinking tokens are counted inside output). No cost is reported.
-- **Tool access:** `agy` has no switch to disable its tools. With `--sandbox` and without `--dangerously-skip-permissions`, it read a file outside its working directory in P4. The adapter is therefore documented as for trusted repositories only, and R10 applies.
+- **Tool access:** `agy` has no switch to disable its tools and keeps its file, shell and web tools. With `--sandbox` and without `--dangerously-skip-permissions`, it read a file outside its working directory in P4. In the P3 runs it called `search_web` with queries built from prompt text and tried to fetch URLs (`read_url_content`) and run commands (`run_command`), so text drawn from a prompt, diff fragments included, can leave the machine. The adapter is therefore documented as for trusted repositories only, and R10 applies.
 - **Permissions:** never `--dangerously-skip-permissions`.
 - **Overhead:** about 12,600 input tokens of the harness's own prompt per call, measured with a two-word prompt on 1.2.9.
+- **Context files:** a sentinel `GEMINI.md` and `AGENTS.md` at the root of a git work tree above the working directory did not reach `agy`'s stored model request (14,324 input tokens against 14,331 without them, 1.2.9). The sentinel run derailed into tool use, so no review output could be checked. A user-level `~/.gemini/GEMINI.md` was not tested.
+
+Before `agy` becomes selectable, all of these must hold on a current release, followed by a passing P3:
+
+- a verified way to stop tool use (untested leads: `--mode plan`, `--json-schema`)
+- a check that a user-level `~/.gemini/GEMINI.md` does not load
+- a check whether print mode applies the user's `~/.gemini` command allowlist
+- a `SUCCESS` result with an empty response raises `CliHandlerError`
 
 ### Child environment
 
@@ -224,7 +232,7 @@ Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/
 
 | Threat | Vector | Mitigation |
 |---|---|---|
-| Credential exfiltration through review text | Prompt injection in the diff asks the agent to print its environment or read a credential file, and the response is posted to the pull request | Claude Code runs with tools off; Codex runs with its tool features switched off (P4). The child environment is allowlisted (R9). Responses are redacted (R10). `agy` keeps tool access (P4) and is documented as for trusted repositories only |
+| Credential exfiltration through review text | Prompt injection in the diff asks the agent to print its environment or read a credential file, and the response is posted to the pull request | Claude Code runs with tools off; Codex runs with its tool features switched off (P4). The child environment is allowlisted (R9). Responses are redacted (R10). `agy` keeps tool access, web search included (P3, P4), and is not selectable |
 | Repository configuration steering the CLI | `.pr_agent.toml` in the pull request | Handler settings are read from the environment only (R6). Model names are validated (R7) |
 | Secrets in fork pipelines | CI trigger choice | The documented triggers are `pull_request` and `issue_comment`, plus GitLab protected and masked variables. Running parent pipelines for fork merge requests is warned against |
 | Supply chain of the CLI | Installer fetched at job start | Versions are pinned by default |
@@ -262,7 +270,7 @@ Probes are short throwaway scripts run against real CLIs and logins before the i
 |---|---|---|---|
 | P1 | Does `agy` finish when started in its own session with piped standard input and output and no terminal ([#318](https://github.com/google-antigravity/antigravity-cli/issues/318) was reproduced on Linux 1.2.3 on 2026-09-15)? | Ten consecutive runs on the current release exit within the timeout | Pass on 1.2.9: ten of ten succeeded, 5 to 35 seconds each |
 | P2 | Does `agy` take the prompt from standard input and return a parseable result? What do `usage` fields mean? | Result parses; token fields mapped | Pass with the stream-json form documented above; `-p` cannot read standard input |
-| P3 | Does PR-Agent's `review` output, produced by `agy` without system-prompt control, parse as PR-Agent expects? | Three sample diffs produce parseable reviews | Pending: needs the adapter, so it gates the `agy` task |
+| P3 | Does PR-Agent's `review` output, produced by `agy` without system-prompt control, parse as PR-Agent expects? | Three sample diffs produce parseable reviews | Fail on 1.2.9 (2026-09-24). With the default effort all three samples were rejected (`--effort` conflicts with the effort in the model name). Without it, 2 of 7 runs produced a review, 3 ended in tool calls with an empty `SUCCESS` result, and 2 hit upstream 503s. The adapter is not selectable |
 | P4 | Can Codex and `agy` run headless with their shell and file tools disabled? | A documented setting disables them; if none exists, the CLI is documented as for trusted repositories only | Codex 0.156.1: pass through `features.*=false`. `agy` 1.2.9: fail, it read a token file outside its working directory with `--sandbox` |
 | P5 | Does a saved Codex ChatGPT login, provided as a CI secret file, keep working across fresh jobs after token refreshes? | Five fresh jobs over two days succeed | Pending, after release |
 | P6 | The same question for `agy`'s cached Google-account credentials | Five fresh jobs over two days succeed | Pending, after release |
@@ -271,7 +279,7 @@ Probes are short throwaway scripts run against real CLIs and logins before the i
 
 - **Upstream refactors the constructors**, for example with the runtime from Discussion #3147. The seam check fails loudly and the weekly job warns a release ahead. The long-term fix is an upstream hook.
 - **Vendor terms change** for subscription use in automation. The package works with API keys regardless; the subscription paths are documented, not required.
-- **`agy` maturity:** open headless issues ([#548](https://github.com/google-antigravity/antigravity-cli/issues/548), and [#781](https://github.com/google-antigravity/antigravity-cli/issues/781) reporting credential leaks through shell output). The adapter ships only if P1 to P3 pass on a current release, and stays marked experimental.
+- **`agy` maturity:** open headless issues ([#548](https://github.com/google-antigravity/antigravity-cli/issues/548), and [#781](https://github.com/google-antigravity/antigravity-cli/issues/781) reporting credential leaks through shell output). The adapter becomes selectable only if P1 to P3 pass on a current release, and stays marked experimental. It failed P3 on 1.2.9.
 - **Output quality with CLI models:** PR-Agent's prompts were tuned against API models. The live smoke test checks that responses still parse; review quality is judged by use.
 
 ## Sources

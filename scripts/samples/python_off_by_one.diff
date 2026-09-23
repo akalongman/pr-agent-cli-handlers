@@ -1,0 +1,12 @@
+diff --git a/src/pagination.py b/src/pagination.py
+index 3b18e51..9c2f7a1 100644
+--- a/src/pagination.py
++++ b/src/pagination.py
+@@ -1,5 +1,5 @@
+ def page_bounds(page: int, per_page: int, total: int) -> tuple[int, int]:
+     """Return the start and end index of a 1-based page."""
+-    start = (page - 1) * per_page
+-    end = min(start + per_page, total)
++    start = page * per_page
++    end = min(start + per_page, total) - 1
+     return start, end

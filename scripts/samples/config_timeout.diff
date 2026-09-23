@@ -1,0 +1,11 @@
+diff --git a/config/settings.toml b/config/settings.toml
+index 0f1e2d3..4c5b6a7 100644
+--- a/config/settings.toml
++++ b/config/settings.toml
+@@ -1,4 +1,5 @@
+ [http]
+-timeout_seconds = 30
++timeout_seconds = 0
++retries = -1
+ user_agent = "example/1.0"
+ verify_tls = true

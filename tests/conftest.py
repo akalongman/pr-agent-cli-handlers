@@ -43,3 +43,20 @@ def fake_cli(tmp_path, monkeypatch):
         return record
 
     return install
+
+
+@pytest.fixture
+def restore_seams():
+    """Snapshot the ai_handler defaults activation may replace, and put them back after the test."""
+    import importlib
+
+    from pr_agent_cli_handlers.activation import SEAMS
+
+    saved = []
+    for seam in SEAMS:
+        init = getattr(importlib.import_module(seam.module), seam.qualname).__init__
+        saved.append((init, init.__defaults__, init.__kwdefaults__))
+    yield
+    for init, defaults, kwdefaults in saved:
+        init.__defaults__ = defaults
+        init.__kwdefaults__ = kwdefaults

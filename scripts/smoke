@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Run PR-Agent's review through one CLI handler against sample diffs. Uses the real CLI and its login;
+# run it by hand before a release, never in CI.
+set -euo pipefail
+
+if [ "$#" -lt 2 ]; then
+  echo "usage: scripts/smoke <claude_code|codex|agy> <model> [diff-file ...]" >&2
+  exit 2
+fi
+handler=$1
+model=$2
+shift 2
+root=$(cd "$(dirname "$0")/.." && pwd)
+if [ "$#" -eq 0 ]; then
+  set -- "$root"/scripts/samples/*.diff
+fi
+out=$(mktemp -d)
+export LITELLM_LOCAL_MODEL_COST_MAP=True
+export PR_AGENT_CLI_HANDLER="$handler"
+export CONFIG__MODEL="$model"
+export CONFIG__FALLBACK_MODELS='[]'
+export CONFIG__CUSTOM_MODEL_MAX_TOKENS=200000
+
+status=0
+for diff in "$@"; do
+  name=$(basename "$diff" .diff)
+  if uv run --project "$root" pr-agent-cli-handlers --diff-file "$diff" --json-output "$out/$name.json" review \
+      >"$out/$name.md" 2>"$out/$name.log" \
+    && python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d, dict) and d else 1)' \
+      "$out/$name.json"; then
+    echo "ok   $name"
+  else
+    echo "FAIL $name (output and logs in $out)"
+    status=1
+  fi
+done
+exit "$status"

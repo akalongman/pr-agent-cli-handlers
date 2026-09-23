@@ -316,6 +316,13 @@ def test_map_model_keeps_the_last_segment_of_a_valid_name(monkeypatch, model, ex
     assert _EchoAdapter().map_model(model) == expected
 
 
+@pytest.mark.parametrize("model", ["anthropic/-rf", "openrouter/--claude", "x/.hidden"])
+def test_map_model_rejects_a_last_segment_outside_the_model_pattern(monkeypatch, model):
+    _install_settings(monkeypatch)
+    with pytest.raises(CliHandlerError, match="invalid model name"):
+        _EchoAdapter().map_model(model)
+
+
 async def test_run_passes_only_the_allowlisted_environment(monkeypatch):
     _install_settings(monkeypatch)
     monkeypatch.setenv("GITHUB_TOKEN", "ghs_sentinel_github")

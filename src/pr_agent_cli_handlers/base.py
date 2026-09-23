@@ -85,11 +85,12 @@ class CliAIHandler(BaseAiHandler):
     def map_model(self, model: str) -> str:
         """Validate ``model`` and return its last ``/``-separated segment; adapters may narrow this.
 
-        Drop every provider prefix, so ``openrouter/anthropic/claude-x`` becomes ``claude-x``.
+        Drop every provider prefix, so ``openrouter/anthropic/claude-x`` becomes ``claude-x``. Check the segment
+        against the pattern too, so ``anthropic/--claude`` cannot reach the CLI as a flag.
         """
         if isinstance(model, str) and MODEL_NAME.fullmatch(model):
             name = model.rsplit("/", 1)[-1]
-            if name:
+            if MODEL_NAME.fullmatch(name):
                 return name
         raise CliHandlerError(f"{type(self).__name__}: invalid model name {model!r}")
 

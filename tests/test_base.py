@@ -282,7 +282,14 @@ async def test_run_kills_process_group_on_cancellation(monkeypatch, tmp_path):
     _install_settings(monkeypatch)
     handler = _RealProcessAdapter()
     pid_file = tmp_path / "pid"
-    script = f"import os, time; open({str(pid_file)!r}, 'w').write(str(os.getpid())); time.sleep(5)"
+    partial_file = tmp_path / "pid.partial"
+    # Write the pid aside and rename it into place, so the test never reads a created but still empty file.
+    script = (
+        "import os, pathlib, time; "
+        f"pathlib.Path({str(partial_file)!r}).write_text(str(os.getpid())); "
+        f"os.replace({str(partial_file)!r}, {str(pid_file)!r}); "
+        "time.sleep(5)"
+    )
     command = CliCommand(argv=[sys.executable, "-c", script])
 
     task = asyncio.ensure_future(handler._run(command))

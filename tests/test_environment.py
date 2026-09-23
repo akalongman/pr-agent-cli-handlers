@@ -1,9 +1,11 @@
 import math
+import os
 
 import pytest
 
 from pr_agent_cli_handlers.environment import (
     BINARY_VAR,
+    CREDENTIAL_NAME_MARKERS,
     EXTRA_ARGS_VAR,
     PASS_ENV_VAR,
     REDACTED,
@@ -126,3 +128,9 @@ def test_redact_replaces_every_occurrence_and_prefers_the_longest_secret():
     assert redact(text, ["sk-ant-oat-sentinel", "sk-ant-oat-sentinel-long"]) == (
         f"a {REDACTED} b {REDACTED} c {REDACTED}")
     assert redact("nothing here", ["sk-ant-oat-sentinel"]) == "nothing here"
+
+
+def test_no_credential_like_variable_reaches_a_test():
+    # Collect names only, so a failure never prints a value from the developer's or CI's environment.
+    names = sorted(name for name in os.environ if any(marker in name.upper() for marker in CREDENTIAL_NAME_MARKERS))
+    assert names == []

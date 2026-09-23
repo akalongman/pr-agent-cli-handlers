@@ -73,8 +73,9 @@ def test_release_workflow_publishes_through_trusted_publishing():
 
 def test_release_build_gates_the_upload_on_the_checks_and_the_tag_version():
     build = _workflow("release.yml")["jobs"]["build"]
+    assert build["env"]["UV_FROZEN"] == "1"
     runs = [step["run"] for step in build["steps"] if "run" in step]
-    assert runs == ["uv sync --locked", "uv run ruff check", "uv run pytest -q", "uv build",
+    assert runs == ["uv sync", "uv run ruff check", "uv run pytest -q", "uv build",
                     'test -f "dist/pr_agent_cli_handlers-${GITHUB_REF_NAME#v}.tar.gz"']
     assert _setup_uv(build)["with"]["enable-cache"] is False
     assert build["steps"][-1]["uses"].startswith("actions/upload-artifact@")

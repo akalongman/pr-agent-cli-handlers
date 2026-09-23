@@ -1,8 +1,10 @@
-"""Run Claude Code headless (``claude -p``) once per call.
+"""Run Claude Code headless (``claude -p``) once per call, in an empty working directory.
 
-The flag set turns the harness into a plain completion: its own system prompt is replaced,
-tools, settings files and MCP servers are off, and nothing is persisted. Authentication is
-the harness's own login; this adapter reads no credentials.
+Turn the harness into a plain completion: ``--system-prompt`` replaces its own system prompt,
+``--tools ""`` and ``--strict-mcp-config`` leave no tools and no MCP servers, ``--restricted`` skips
+settings files, ``--safe-mode`` skips CLAUDE.md and other customizations (skills, plugins, hooks), and
+``--no-session-persistence`` keeps nothing. The empty directory leaves no project CLAUDE.md to find.
+Authentication is the harness's own login; this adapter reads no credentials.
 """
 import json
 
@@ -25,6 +27,10 @@ class ClaudeCodeAIHandler(CliAIHandler):
         "AWS_PROFILE",
     })
 
+    def __init__(self):
+        super().__init__()
+        self.workdir = self.create_workdir("pr-agent-claude-")
+
     def map_model(self, model: str) -> str:
         name = super().map_model(model)
         if name.startswith("anthropic."):
@@ -39,7 +45,7 @@ class ClaudeCodeAIHandler(CliAIHandler):
     def build_command(self, model: str, system: str, user: str) -> CliCommand:
         argv = [
             self.binary, "-p",
-            "--restricted", "--strict-mcp-config", "--tools", "",
+            "--restricted", "--safe-mode", "--strict-mcp-config", "--tools", "",
             "--no-session-persistence", "--output-format", "json",
             "--system-prompt", system, "--model", model,
         ]
@@ -47,7 +53,7 @@ class ClaudeCodeAIHandler(CliAIHandler):
         if effort in CLAUDE_CODE_EFFORTS:
             argv += ["--effort", effort]
         argv += self.extra_args
-        return CliCommand(argv=argv, stdin=user)
+        return CliCommand(argv=argv, stdin=user, cwd=self.workdir)
 
     def parse_response(self, stdout: str) -> CliResponse:
         try:

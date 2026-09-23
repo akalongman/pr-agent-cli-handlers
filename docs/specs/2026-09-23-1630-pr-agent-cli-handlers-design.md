@@ -130,12 +130,13 @@ The model, fallback models and reasoning effort still come from PR-Agent's setti
 **Claude Code adapter** (argument list as at `6c707fe6`):
 
 ```
-claude -p --restricted --strict-mcp-config --tools "" --no-session-persistence
+claude -p --restricted --safe-mode --strict-mcp-config --tools "" --no-session-persistence
        --output-format json --system-prompt <system> --model <model>
        [--effort low|medium|high|xhigh|max] [extra args]
 ```
 
 - **Input and tools:** the user prompt goes on standard input, and tools are off.
+- **Working directory:** an empty temporary directory, as for Codex.
 - **Model names:** Claude names or the aliases `opus`, `sonnet`, `haiku` and `fable`, after stripping a provider prefix and an `anthropic.` prefix.
 - **Output:** a result whose `subtype` is not `success` raises with the subtype named.
 

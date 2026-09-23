@@ -1,4 +1,5 @@
 import json
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -38,11 +39,23 @@ def test_build_command_uses_the_restricted_headless_flag_set(monkeypatch):
     command = ClaudeCodeAIHandler().build_command("claude-opus-5", "SYS", "USER")
 
     assert command.argv == [
-        "claude", "-p", "--restricted", "--strict-mcp-config", "--tools", "", "--no-session-persistence",
-        "--output-format", "json", "--system-prompt", "SYS", "--model", "claude-opus-5", "--effort", "xhigh",
-        "--verbose",
+        "claude", "-p", "--restricted", "--safe-mode", "--strict-mcp-config", "--tools", "",
+        "--no-session-persistence", "--output-format", "json", "--system-prompt", "SYS", "--model", "claude-opus-5",
+        "--effort", "xhigh", "--verbose",
     ]
     assert command.stdin == "USER"
+
+
+def test_build_command_runs_in_one_empty_workdir_per_handler(monkeypatch):
+    _install_settings(monkeypatch)
+    handler = ClaudeCodeAIHandler()
+
+    first = handler.build_command("claude-opus-5", "SYS", "USER")
+    second = handler.build_command("claude-opus-5", "SYS", "USER")
+
+    assert first.cwd == second.cwd == handler.workdir
+    assert os.path.isdir(handler.workdir)
+    assert os.listdir(handler.workdir) == []
 
 
 def test_build_command_omits_effort_the_harness_does_not_accept(monkeypatch):
@@ -181,3 +194,5 @@ async def test_contract_runs_the_claude_binary_with_the_built_command(monkeypatc
     assert (text, finish_reason) == ("looks good", "stop")
     assert recorded["argv"] == handler.build_command("claude-opus-5", "SYS", "USER").argv[1:]
     assert recorded["stdin"] == "USER"
+    assert recorded["cwd"] == handler.workdir
+    assert recorded["cwd"] != os.getcwd()

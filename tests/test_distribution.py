@@ -44,6 +44,10 @@ def _workflow(name):
     return yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text())
 
 
+def _setup_uv(job):
+    return next(step for step in job["steps"] if step.get("uses", "").startswith("astral-sh/setup-uv@"))
+
+
 def test_upstream_workflow_runs_weekly_against_pr_agent_main():
     workflow = _workflow("upstream-main.yml")
     triggers = workflow[True]  # YAML 1.1 reads the bare key "on" as a boolean.
@@ -51,6 +55,7 @@ def test_upstream_workflow_runs_weekly_against_pr_agent_main():
     runs = [step.get("run", "") for step in workflow["jobs"]["upstream-main"]["steps"]]
     assert any("git+https://github.com/The-PR-Agent/pr-agent@main" in run for run in runs)
     assert any("python -m pr_agent_cli_handlers.seam_scan" in run for run in runs)
+    assert _setup_uv(workflow["jobs"]["upstream-main"])["with"]["enable-cache"] is False
 
 
 def test_release_workflow_publishes_through_trusted_publishing():
@@ -61,3 +66,15 @@ def test_release_workflow_publishes_through_trusted_publishing():
     uses = [step.get("uses", "") for step in job["steps"]]
     assert "pypa/gh-action-pypi-publish@release/v1" in uses
     assert "password" not in (ROOT / ".github" / "workflows" / "release.yml").read_text()
+    assert job["needs"] == "build"
+    assert [use.split("@")[0] for use in uses] == ["actions/download-artifact", "pypa/gh-action-pypi-publish"]
+    assert workflow["jobs"]["build"]["permissions"] == {"contents": "read"}  # No id-token in the build job.
+
+
+def test_release_build_gates_the_upload_on_the_checks_and_the_tag_version():
+    build = _workflow("release.yml")["jobs"]["build"]
+    runs = [step["run"] for step in build["steps"] if "run" in step]
+    assert runs == ["uv sync --locked", "uv run ruff check", "uv run pytest -q", "uv build",
+                    'test -f "dist/pr_agent_cli_handlers-${GITHUB_REF_NAME#v}.tar.gz"']
+    assert _setup_uv(build)["with"]["enable-cache"] is False
+    assert build["steps"][-1]["uses"].startswith("actions/upload-artifact@")

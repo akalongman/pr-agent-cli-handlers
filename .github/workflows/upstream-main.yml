@@ -18,6 +18,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
+          enable-cache: false
       - run: uv sync
       - run: uv pip install --reinstall "pr-agent @ git+https://github.com/The-PR-Agent/pr-agent@main"
       - run: uv run --no-sync python -m pr_agent_cli_handlers.seam_scan

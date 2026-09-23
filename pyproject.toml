@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pr-agent-cli-handlers"
+dynamic = ["version"]
+description = "Run PR-Agent through local agent CLIs (Claude Code, Codex, Antigravity) instead of LiteLLM API calls"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "Avtandil Kikabidze", email = "akalongman@gmail.com" }]
+dependencies = ["pr-agent>=0.46"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.urls]
+Homepage = "https://github.com/akalongman/pr-agent-cli-handlers"
+Issues = "https://github.com/akalongman/pr-agent-cli-handlers/issues"
+
+[project.scripts]
+pr-agent-cli-handlers = "pr_agent_cli_handlers.cli:entrypoint"
+
+[dependency-groups]
+dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.6"]
+
+[tool.hatch.version]
+path = "src/pr_agent_cli_handlers/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pr_agent_cli_handlers"]
+
+[tool.ruff]
+line-length = 120
+src = ["src", "tests"]
+lint.select = ["E", "F", "B", "I"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"

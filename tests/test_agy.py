@@ -38,30 +38,22 @@ def test_build_command_uses_stream_json_on_stdin_in_an_empty_workdir(monkeypatch
     monkeypatch.setenv("PR_AGENT_CLI_EXTRA_ARGS", "--log-file /tmp/agy.log")
     handler = AgyAIHandler()
 
-    command = handler.build_command("gemini-3.8-pro", "SYS", "USER")
+    command = handler.build_command("gemini-3.8-flash-high", "SYS", "USER")
 
     assert command.argv == [
         "agy", "--disable-slash-commands", "--sandbox", "--input-format", "stream-json", "--output-format",
-        "stream-json", "--model", "gemini-3.8-pro", "--effort", "medium", "--log-file", "/tmp/agy.log",
+        "stream-json", "--model", "gemini-3.8-flash-high", "--log-file", "/tmp/agy.log",
     ]
     assert json.loads(command.stdin) == {"event": "user", "message": {"content": "SYS\n\nUSER"}}
     assert command.stdin.endswith("\n")
     assert command.cwd == handler.workdir
 
 
-@pytest.mark.parametrize("effort, expected", [
-    ("none", "low"), ("minimal", "low"), ("low", "low"), ("medium", "medium"), ("high", "high"),
-    ("xhigh", "high"), ("max", "high"), ("MAX", "high"),
-])
-def test_build_command_maps_reasoning_effort(monkeypatch, effort, expected):
+@pytest.mark.parametrize("effort", [None, "none", "minimal", "low", "medium", "high", "xhigh", "max", "turbo"])
+def test_build_command_never_passes_effort(monkeypatch, effort):
     _install_settings(monkeypatch, {"CONFIG.REASONING_EFFORT": effort})
-    argv = AgyAIHandler().build_command("m", "S", "U").argv
-    assert argv[argv.index("--effort") + 1] == expected
-
-
-def test_build_command_skips_unknown_effort(monkeypatch):
-    _install_settings(monkeypatch, {"CONFIG.REASONING_EFFORT": "turbo"})
-    assert "--effort" not in AgyAIHandler().build_command("m", "S", "U").argv
+    for model in ("gemini-3.8-flash-high", "claude-sonnet-4-6"):
+        assert "--effort" not in AgyAIHandler().build_command(model, "S", "U").argv
 
 
 def test_parse_response_reads_the_result_line(monkeypatch):
@@ -104,10 +96,10 @@ async def test_contract_runs_the_agy_binary_in_its_workdir(monkeypatch, fake_cli
     record = fake_cli("agy", _lines(_result(response="looks good")))
     handler = AgyAIHandler()
 
-    text, finish_reason = await handler.chat_completion(model="gemini-3.8-pro", system="SYS", user="USER")
+    text, finish_reason = await handler.chat_completion(model="gemini-3.8-flash-high", system="SYS", user="USER")
 
     recorded = json.loads(record.read_text())
     assert (text, finish_reason) == ("looks good", "stop")
-    assert recorded["argv"] == handler.build_command("gemini-3.8-pro", "SYS", "USER").argv[1:]
+    assert recorded["argv"] == handler.build_command("gemini-3.8-flash-high", "SYS", "USER").argv[1:]
     assert json.loads(recorded["stdin"]) == {"event": "user", "message": {"content": "SYS\n\nUSER"}}
     assert os.path.realpath(recorded["cwd"]) == os.path.realpath(handler.workdir)

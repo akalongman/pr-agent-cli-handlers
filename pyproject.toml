@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pr-agent-cli-handlers"
 dynamic = ["version"]
-description = "Run PR-Agent through local agent CLIs (Claude Code, Codex, Antigravity) instead of LiteLLM API calls"
+description = "Run PR-Agent through local agent CLIs (Claude Code, Codex) instead of LiteLLM API calls"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.12"

@@ -139,10 +139,15 @@ claude -p --restricted --strict-mcp-config --tools "" --no-session-persistence
 - **Model names:** Claude names or the aliases `opus`, `sonnet`, `haiku` and `fable`, after stripping a provider prefix and an `anthropic.` prefix.
 - **Output:** a result whose `subtype` is not `success` raises with the subtype named.
 
-**Codex adapter** (argument list as at `6c707fe6`):
+**Codex adapter** (argument list as at `6c707fe6`, plus the feature switches P4 established):
 
 ```
 codex --ask-for-approval never --sandbox read-only --model <model>
+      --config features.shell_tool=false --config features.unified_exec=false
+      --config features.browser_use=false --config features.computer_use=false
+      --config features.apps=false --config features.plugins=false
+      --config features.view_image=false --config features.image_generation=false
+      --config features.in_app_browser=false
       --config developer_instructions=<TOML string>
       [--config model_reasoning_effort="<effort>"]
       exec --json --ephemeral --ignore-user-config --ignore-rules
@@ -152,20 +157,24 @@ codex --ask-for-approval never --sandbox read-only --model <model>
 - **Input and working directory:** the user prompt goes on standard input. The empty working directory is created once per handler instance and removed on garbage collection.
 - **Effort:** `low` to `max` pass through; `none` and `minimal` become `low`.
 - **Output:** the parser raises on the first `error` or `turn.failed` event.
-- **Tool access:** the read-only sandbox blocks writes and network access but not reads, so Codex keeps file and command access. See P4.
+- **Tool access:** the read-only sandbox alone blocks writes and network access but not reads. The `features.*=false` switches remove the shell, command execution, browser, computer-use, apps, plugins and image tools; with them the Codex 0.156.1 prompt shrank from 30,660 to 12,656 input tokens (P4).
 
 **`agy` adapter (experimental; probes P1 to P3 decide whether it ships, P4 decides its trust guidance):**
 
 ```
-agy -p --output-format json --input-format stream-json --sandbox --model <model>
-    [--effort low|medium|high] [extra args]
+agy --disable-slash-commands --sandbox --input-format stream-json --output-format stream-json
+    --model <model> [--effort low|medium|high] [extra args]
 ```
 
+- **No `-p`:** `-p` takes the prompt as its value, and `--input-format stream-json` refuses a command-line prompt. The stream-json form runs one turn per input line and needs no `-p` (P2).
 - **Input:** standard input carries one line, `{"event": "user", "message": {"content": "<system>\n\n<user>"}}`. `agy` has no system-prompt override (feature requests [#50](https://github.com/google-antigravity/antigravity-cli/issues/50) and [#892](https://github.com/google-antigravity/antigravity-cli/issues/892) are open), so PR-Agent's system prompt is prepended to the message.
+- **Slash commands:** `--disable-slash-commands`, so text such as `/review` inside a prompt is not expanded.
 - **Working directory:** an empty temporary directory, as for Codex.
 - **Effort:** `low`, `medium` and `high` pass through; `xhigh` and `max` become `high`; `none` and `minimal` become `low`.
-- **Output:** a JSON envelope. `status` other than `SUCCESS` raises with the status and `error` named; otherwise the text is `response`. The token mapping from `usage` is settled by P2.
+- **Output:** newline-delimited JSON. The line whose `event` is `result` carries `result.status`, `result.response`, `result.error` and `result.usage`. A missing result line, or a `status` other than `SUCCESS`, raises with the status and `error` named. Tokens map as `prompt = usage.input_tokens` and `completion = usage.output_tokens` (`total_tokens` equals their sum; thinking tokens are counted inside output). No cost is reported.
+- **Tool access:** `agy` has no switch to disable its tools. With `--sandbox` and without `--dangerously-skip-permissions`, it read a file outside its working directory in P4. The adapter is therefore documented as for trusted repositories only, and R10 applies.
 - **Permissions:** never `--dangerously-skip-permissions`.
+- **Overhead:** about 12,600 input tokens of the harness's own prompt per call, measured with a two-word prompt on 1.2.9.
 
 ### Child environment
 
@@ -174,7 +183,7 @@ The CLI process receives only:
 - **Base:** `PATH`, `HOME`, `USER`, `LOGNAME`, `LANG`, `LANGUAGE`, `LC_*`, `TZ`, `TMPDIR`, `TEMP`, `TMP`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `ALL_PROXY` (and their lowercase forms), `SSL_CERT_FILE`, `SSL_CERT_DIR`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`.
 - **Claude Code:** `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION`, `GOOGLE_APPLICATION_CREDENTIALS`, `AWS_REGION`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`.
 - **Codex:** `OPENAI_API_KEY`, `CODEX_API_KEY`, `OPENAI_BASE_URL`, `CODEX_HOME`.
-- **`agy`:** `GEMINI_API_KEY`, plus whatever P2 shows it needs.
+- **`agy`:** `GEMINI_API_KEY`. Its cached Google-account login lives under `HOME`; the P3 gate runs `agy` with exactly this allowlisted environment, so a missing variable surfaces there.
 - **Extras:** every name listed in `PR_AGENT_CLI_PASS_ENV`.
 
 Everything else is dropped: the git provider tokens PR-Agent uses (`GITHUB_TOKEN`, `GITHUB__USER_TOKEN`, `GITLAB__PERSONAL_ACCESS_TOKEN`, `CI_JOB_TOKEN` and the rest) and the credentials of the other adapters.
@@ -191,7 +200,7 @@ Everything else is dropped: the git provider tokens PR-Agent uses (`GITHUB_TOKEN
   4. run `pr-agent-cli-handlers action`
 
   Inputs: handler, CLI version, model. Credentials come from secrets through `env`. The documented triggers are `pull_request` and `issue_comment`, so fork pull requests receive no secrets and are skipped. `pull_request_target` is documented as an explicit opt-in: the action never checks out pull request code, but a fork's diff can still carry prompt-injection text.
-- **GitLab pipelines.** A versioned template (`templates/gitlab-ci.yml`), usable with `include: remote:` or copied. It runs on `python:3.12-slim` for `merge_request_event`, installs the package and the selected CLI, and runs `describe`, `review` and `improve` against `$CI_MERGE_REQUEST_PROJECT_URL/-/merge_requests/$CI_MERGE_REQUEST_IID`, as PR-Agent's own pipeline mode does.
+- **GitLab pipelines.** A versioned template (`templates/gitlab-ci.yml`), usable with `include: remote:` or copied. It runs on `node:22-bookworm` for `merge_request_event` (Node for the npm-installed CLIs), installs uv, which provides Python 3.12, then installs the package and the selected CLI, and runs `describe`, `review` and `improve` against `$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID`, exactly as PR-Agent's own pipeline mode does.
 
 ### Credentials and compliance
 
@@ -213,7 +222,7 @@ Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/
 
 | Threat | Vector | Mitigation |
 |---|---|---|
-| Credential exfiltration through review text | Prompt injection in the diff asks the agent to print its environment or read a credential file, and the response is posted to the pull request | Claude Code runs with tools off. The child environment is allowlisted (R9). Responses are redacted (R10). Codex and `agy` are documented as for trusted repositories unless P4 finds a way to turn their tools off |
+| Credential exfiltration through review text | Prompt injection in the diff asks the agent to print its environment or read a credential file, and the response is posted to the pull request | Claude Code runs with tools off; Codex runs with its tool features switched off (P4). The child environment is allowlisted (R9). Responses are redacted (R10). `agy` keeps tool access (P4) and is documented as for trusted repositories only |
 | Repository configuration steering the CLI | `.pr_agent.toml` in the pull request | Handler settings are read from the environment only (R6). Model names are validated (R7) |
 | Secrets in fork pipelines | CI trigger choice | The documented triggers are `pull_request` and `issue_comment`, plus GitLab protected and masked variables. Running parent pipelines for fork merge requests is warned against |
 | Supply chain of the CLI | Installer fetched at job start | Versions are pinned by default |
@@ -227,7 +236,7 @@ Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/
   - activation: a real seam check on the installed PR-Agent; a clear exit on a stand-in class whose constructor lacks the default; default replacement on all listed constructors; argument pass-through to `pr_agent.cli.run`; exit before start on an invalid `PR_AGENT_CLI_HANDLER`
   - security: sentinel values in `GITHUB_TOKEN`, `GITLAB__PERSONAL_ACCESS_TOKEN`, `CI_JOB_TOKEN` and the other adapters' credential variables never reach the child environment, logs or error messages; the adapter's own credential variables do; a response containing a sentinel value is redacted; invalid model names are rejected
 - **Adapter contract tests:** a fake executable per CLI placed on `PATH` records its arguments and standard input and replays recorded output, including error envelopes and every `agy` status value.
-- **Live smoke test** (`scripts/smoke`, manual): runs `review` through each installed CLI against a small local diff with `CONFIG__GIT_PROVIDER=local`. Run before every release.
+- **Live smoke test** (`scripts/smoke`, manual): runs `review` through each installed CLI against three small sample diffs in PR-Agent's plain-diff mode (`--diff-file`, with `--json-output` as the parse check). Run before every release.
 - **Lint:** Ruff with PR-Agent's rules (E, F, B, I; 120 columns), so the code stays portable back to PR-Agent.
 
 ## Compatibility with upstream
@@ -247,14 +256,14 @@ Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/
 
 Probes are short throwaway scripts run against real CLIs and logins before the implementation plan is final. A failed probe marks a path unsupported or experimental in the documentation; it does not block the first release.
 
-| Id | Question | Pass condition |
-|---|---|---|
-| P1 | Does `agy -p` finish when started in its own session with piped standard input and output and no terminal ([#318](https://github.com/google-antigravity/antigravity-cli/issues/318) was reproduced on Linux 1.2.3 on 2026-09-15)? | Ten consecutive runs on the current release exit within the timeout |
-| P2 | Does `agy -p --input-format stream-json --output-format json` take the prompt from standard input and return a parseable envelope? What do `usage` fields mean, and which environment variables does `agy` need? | Envelope parses; token fields mapped; variables listed |
-| P3 | Does PR-Agent's `review` output, produced by `agy` without system-prompt control, parse as PR-Agent expects? | Three sample diffs produce parseable reviews |
-| P4 | Can Codex and `agy` run headless with their shell and file tools disabled? | A documented setting disables them; if none exists, both are documented as for trusted repositories only |
-| P5 | Does a saved Codex ChatGPT login, provided as a CI secret file, keep working across fresh jobs after token refreshes? | Five fresh jobs over two days succeed |
-| P6 | The same question for `agy`'s cached Google-account credentials | Five fresh jobs over two days succeed |
+| Id | Question | Pass condition | Result (2026-09-23) |
+|---|---|---|---|
+| P1 | Does `agy` finish when started in its own session with piped standard input and output and no terminal ([#318](https://github.com/google-antigravity/antigravity-cli/issues/318) was reproduced on Linux 1.2.3 on 2026-09-15)? | Ten consecutive runs on the current release exit within the timeout | Pass on 1.2.9: ten of ten succeeded, 5 to 35 seconds each |
+| P2 | Does `agy` take the prompt from standard input and return a parseable result? What do `usage` fields mean? | Result parses; token fields mapped | Pass with the stream-json form documented above; `-p` cannot read standard input |
+| P3 | Does PR-Agent's `review` output, produced by `agy` without system-prompt control, parse as PR-Agent expects? | Three sample diffs produce parseable reviews | Pending: needs the adapter, so it gates the `agy` task |
+| P4 | Can Codex and `agy` run headless with their shell and file tools disabled? | A documented setting disables them; if none exists, the CLI is documented as for trusted repositories only | Codex 0.156.1: pass through `features.*=false`. `agy` 1.2.9: fail, it read a token file outside its working directory with `--sandbox` |
+| P5 | Does a saved Codex ChatGPT login, provided as a CI secret file, keep working across fresh jobs after token refreshes? | Five fresh jobs over two days succeed | Pending, after release |
+| P6 | The same question for `agy`'s cached Google-account credentials | Five fresh jobs over two days succeed | Pending, after release |
 
 ## Risks
 

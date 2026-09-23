@@ -38,3 +38,26 @@ def test_readme_documents_every_environment_variable_and_handler():
     for name in ("PR_AGENT_CLI_HANDLER", "PR_AGENT_CLI_BINARY", "PR_AGENT_CLI_EXTRA_ARGS", "PR_AGENT_CLI_TIMEOUT",
                  "PR_AGENT_CLI_PASS_ENV", "claude_code", "codex"):
         assert name in readme
+
+
+def _workflow(name):
+    return yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text())
+
+
+def test_upstream_workflow_runs_weekly_against_pr_agent_main():
+    workflow = _workflow("upstream-main.yml")
+    triggers = workflow[True]  # YAML 1.1 reads the bare key "on" as a boolean.
+    assert "schedule" in triggers and "workflow_dispatch" in triggers
+    runs = [step.get("run", "") for step in workflow["jobs"]["upstream-main"]["steps"]]
+    assert any("git+https://github.com/The-PR-Agent/pr-agent@main" in run for run in runs)
+    assert any("python -m pr_agent_cli_handlers.seam_scan" in run for run in runs)
+
+
+def test_release_workflow_publishes_through_trusted_publishing():
+    workflow = _workflow("release.yml")
+    job = workflow["jobs"]["publish"]
+    assert workflow[True]["push"]["tags"] == ["v*"]
+    assert job["permissions"]["id-token"] == "write"
+    uses = [step.get("uses", "") for step in job["steps"]]
+    assert "pypa/gh-action-pypi-publish@release/v1" in uses
+    assert "password" not in (ROOT / ".github" / "workflows" / "release.yml").read_text()

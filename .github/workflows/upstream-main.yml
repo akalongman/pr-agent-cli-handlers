@@ -1,0 +1,24 @@
+name: upstream-main
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-main:
+    runs-on: ubuntu-latest
+    env:
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv pip install --reinstall "pr-agent @ git+https://github.com/The-PR-Agent/pr-agent@main"
+      - run: uv run --no-sync python -m pr_agent_cli_handlers.seam_scan
+      - run: uv run --no-sync pytest -q

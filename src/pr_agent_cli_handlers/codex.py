@@ -2,9 +2,9 @@
 
 Global flags go before the subcommand: approvals off, a read-only sandbox, the model, every tool
 feature switched off so the run is a plain completion, and PR-Agent's system prompt as
-``developer_instructions``. The run is ephemeral, ignores the user's config and rules, and starts in
-an empty directory so no AGENTS.md is discovered. Authentication is the CLI's own login; this adapter
-reads no credentials.
+``developer_instructions``. The run is ephemeral, ignores the user's config and rules, starts in an
+empty directory and loads no AGENTS.md (``project_doc_max_bytes=0``). Authentication is the CLI's own
+login; this adapter reads no credentials.
 """
 import json
 
@@ -55,6 +55,8 @@ class CodexAIHandler(CliAIHandler):
         argv = [self.binary, "--ask-for-approval", "never", "--sandbox", "read-only", "--model", model]
         for feature in CODEX_DISABLED_FEATURES:
             argv += ["--config", f"features.{feature}=false"]
+        # Load no AGENTS.md: Codex otherwise reads the one at the root of a git work tree above the workdir.
+        argv += ["--config", "project_doc_max_bytes=0"]
         argv += ["--config", "developer_instructions=" + toml_basic_string(system)]
         effort = self.reasoning_effort()
         effort = CODEX_EFFORT_ALIASES.get(effort, effort)

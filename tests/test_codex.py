@@ -1,6 +1,7 @@
 import gc
 import json
 import os
+from itertools import pairwise
 from types import SimpleNamespace
 
 import pytest
@@ -48,12 +49,22 @@ def test_build_command_places_global_flags_before_exec(monkeypatch):
         "--config", "features.view_image=false",
         "--config", "features.image_generation=false",
         "--config", "features.in_app_browser=false",
+        "--config", "project_doc_max_bytes=0",
         "--config", 'developer_instructions="SYS line1\\nline2"',
         "--config", 'model_reasoning_effort="max"',
         "exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
         "--color", "never", "--cd", handler.workdir, "--profile", "ci", "-",
     ]
     assert command.stdin == "USER"
+
+
+def test_build_command_disables_project_docs_before_exec(monkeypatch):
+    _install_settings(monkeypatch)
+    argv = CodexAIHandler().build_command("gpt-5.6", "SYS", "USER").argv
+
+    pairs = list(pairwise(argv))
+    assert ("--config", "project_doc_max_bytes=0") in pairs
+    assert pairs.index(("--config", "project_doc_max_bytes=0")) < argv.index("exec")
 
 
 def test_build_command_skips_unknown_effort(monkeypatch):

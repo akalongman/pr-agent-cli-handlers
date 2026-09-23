@@ -149,6 +149,7 @@ codex --ask-for-approval never --sandbox read-only --model <model>
       --config features.apps=false --config features.plugins=false
       --config features.view_image=false --config features.image_generation=false
       --config features.in_app_browser=false
+      --config project_doc_max_bytes=0
       --config developer_instructions=<TOML string>
       [--config model_reasoning_effort="<effort>"]
       exec --json --ephemeral --ignore-user-config --ignore-rules

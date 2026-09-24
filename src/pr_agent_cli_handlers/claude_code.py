@@ -3,8 +3,9 @@
 Turn the harness into a plain completion: ``--system-prompt`` replaces its own system prompt,
 ``--tools ""`` and ``--strict-mcp-config`` leave no tools and no MCP servers, ``--restricted`` skips
 settings files, ``--safe-mode`` skips CLAUDE.md and other customizations (skills, plugins, hooks), and
-``--no-session-persistence`` keeps nothing. The empty directory leaves no project CLAUDE.md to find.
-Authentication is the harness's own login; this adapter reads no credentials.
+``--no-session-persistence`` keeps nothing. The empty directory leaves no project CLAUDE.md to find, and
+``DISABLE_AUTOUPDATER=1`` keeps the installed version for every call. Authentication is the harness's own
+login; this adapter reads no credentials.
 """
 import json
 
@@ -30,6 +31,11 @@ class ClaudeCodeAIHandler(CliAIHandler):
     def __init__(self):
         super().__init__()
         self.workdir = self.create_workdir("pr-agent-claude-")
+
+    def child_env(self) -> dict[str, str]:
+        # Set it last, over a value passed through PR_AGENT_CLI_PASS_ENV: Claude Code otherwise updates itself in
+        # the background, and every later call of the job runs the new version instead of the pinned one.
+        return {**super().child_env(), "DISABLE_AUTOUPDATER": "1"}
 
     def map_model(self, model: str) -> str:
         name = super().map_model(model)

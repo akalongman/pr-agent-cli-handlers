@@ -128,7 +128,8 @@ Do not run parent-project pipelines for merge requests from forks while these va
   as `GITHUB_TOKEN`, `GITLAB__PERSONAL_ACCESS_TOKEN` and `CI_JOB_TOKEN` never reach it.
 - Anything a CLI prints is checked for credential values and redacted before PR-Agent sees it. This catches
   exact values only.
-- Claude Code runs with its tools switched off, and Codex with its tool features switched off.
+- Claude Code runs with its tools switched off, and Codex with its tool features switched off. Claude Code also
+  runs with `DISABLE_AUTOUPDATER=1`, so the installed (pinned) version serves every call of a job.
 - Model names must be plain identifiers, because a repository can set `config.model`.
 
 ## Limitations

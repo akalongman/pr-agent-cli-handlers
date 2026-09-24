@@ -139,6 +139,7 @@ claude -p --restricted --safe-mode --strict-mcp-config --tools "" --no-session-p
 - **Working directory:** an empty temporary directory, as for Codex.
 - **Model names:** Claude names or the aliases `opus`, `sonnet`, `haiku` and `fable`, after stripping a provider prefix and an `anthropic.` prefix.
 - **Output:** a result whose `subtype` is not `success` raises with the subtype named.
+- **Environment:** the child environment adds `DISABLE_AUTOUPDATER=1`, set after the allowlist so it also wins over a value passed through `PR_AGENT_CLI_PASS_ENV`.
 
 **Codex adapter** (argument list as at `6c707fe6`, plus the feature switches P4 established):
 
@@ -235,7 +236,7 @@ Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/
 | Credential exfiltration through review text | Prompt injection in the diff asks the agent to print its environment or read a credential file, and the response is posted to the pull request | Claude Code runs with tools off; Codex runs with its tool features switched off (P4). The child environment is allowlisted (R9). Responses are redacted (R10). `agy` keeps tool access, web search included (P3, P4), and is not selectable |
 | Repository configuration steering the CLI | `.pr_agent.toml` in the pull request | Handler settings are read from the environment only (R6). Model names are validated (R7) |
 | Secrets in fork pipelines | CI trigger choice | The documented triggers are `pull_request` and `issue_comment`, plus GitLab masked variables (hidden where GitLab offers it), with the trade-off of protecting them documented. Running parent pipelines for fork merge requests is warned against |
-| Supply chain of the CLI | Installer fetched at job start | Versions are pinned by default |
+| Supply chain of the CLI | Installer fetched at job start | Versions are pinned by default, and Claude Code runs with `DISABLE_AUTOUPDATER=1` so it cannot update itself between calls |
 | Subscription token misuse | A leaked token cannot be scoped or capped | Documentation recommends API keys with spending limits for shared repositories |
 | Process list exposure | The system prompt is an argument for Claude Code and Codex | Accepted. The system prompt is PR-Agent's template plus pull request metadata; credentials never appear in arguments |
 

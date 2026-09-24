@@ -176,6 +176,25 @@ def test_child_env_keeps_the_subscription_token_and_drops_other_tokens(monkeypat
     assert "GITHUB_TOKEN" not in env
 
 
+def test_child_env_disables_the_auto_updater(monkeypatch):
+    _install_settings(monkeypatch)
+    monkeypatch.delenv("DISABLE_AUTOUPDATER", raising=False)
+
+    env = ClaudeCodeAIHandler().child_env()
+
+    assert env["DISABLE_AUTOUPDATER"] == "1"
+
+
+def test_child_env_keeps_the_auto_updater_disabled_over_a_passed_value(monkeypatch):
+    _install_settings(monkeypatch)
+    monkeypatch.setenv("DISABLE_AUTOUPDATER", "0")
+    monkeypatch.setenv("PR_AGENT_CLI_PASS_ENV", "DISABLE_AUTOUPDATER")
+
+    env = ClaudeCodeAIHandler().child_env()
+
+    assert env["DISABLE_AUTOUPDATER"] == "1"
+
+
 @pytest.mark.parametrize("model", ["--claude", "anthropic.--claude", "bedrock/anthropic.--claude"])
 def test_map_model_rejects_a_flag_that_contains_claude(monkeypatch, model):
     _install_settings(monkeypatch)

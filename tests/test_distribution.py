@@ -73,9 +73,20 @@ def test_release_workflow_publishes_through_trusted_publishing():
 
 def test_release_build_gates_the_upload_on_the_checks_and_the_tag_version():
     build = _workflow("release.yml")["jobs"]["build"]
-    assert build["env"]["UV_FROZEN"] == "1"
+    assert build["env"]["UV_LOCKED"] == "1"
+    assert "UV_FROZEN" not in build["env"]
     runs = [step["run"] for step in build["steps"] if "run" in step]
     assert runs == ["uv sync", "uv run ruff check", "uv run pytest -q", "uv build",
                     'test -f "dist/pr_agent_cli_handlers-${GITHUB_REF_NAME#v}.tar.gz"']
     assert _setup_uv(build)["with"]["enable-cache"] is False
     assert build["steps"][-1]["uses"].startswith("actions/upload-artifact@")
+
+
+def test_every_job_that_syncs_fails_on_a_stale_lock():
+    checked = set()
+    for name in ("ci.yml", "upstream-main.yml", "release.yml"):
+        for job_id, job in _workflow(name)["jobs"].items():
+            if any("uv sync" in step.get("run", "") for step in job["steps"]):
+                assert job.get("env", {}).get("UV_LOCKED") == "1", (name, job_id)
+                checked.add((name, job_id))
+    assert checked == {("ci.yml", "test"), ("upstream-main.yml", "upstream-main"), ("release.yml", "build")}

@@ -5,7 +5,8 @@ OpenAI Codex CLI) instead of LiteLLM API calls. Review pull requests and merge r
 already have, or with an API key, locally or in your own CI, with no server and no fork of PR-Agent.
 
 This project is not affiliated with Anthropic, OpenAI, Google or the PR-Agent maintainers. It runs each
-vendor's published CLI unmodified and never reads, stores or forwards your credentials.
+vendor's published CLI unmodified. It never reads or stores a credential and only passes allowlisted variables
+through to the CLI.
 
 ## How it works
 
@@ -110,7 +111,7 @@ unknown slash command (a typo such as `/reviwe`) fails the run, unlike a failed 
 
 `pull_request` gives fork pull requests no secrets, so they are skipped. `pull_request_target` would review
 them with secrets present; the action never checks out pull request code, but a fork's diff can still carry
-instructions aimed at the reviewer. Use it only with the Claude Code or Codex handler.
+instructions aimed at the reviewer.
 
 ## GitLab
 
@@ -125,7 +126,8 @@ Do not run parent-project pipelines for merge requests from forks while these va
 
 - Each CLI receives only an allowlisted environment: process basics, locale, proxies and CA bundles, its own
   credential and configuration variables, and the names in `PR_AGENT_CLI_PASS_ENV`. Git provider tokens such
-  as `GITHUB_TOKEN`, `GITLAB__PERSONAL_ACCESS_TOKEN` and `CI_JOB_TOKEN` never reach it.
+  as `GITHUB_TOKEN`, `GITLAB__PERSONAL_ACCESS_TOKEN` and `CI_JOB_TOKEN` never reach it unless you list them in
+  `PR_AGENT_CLI_PASS_ENV`.
 - Anything a CLI prints is checked for credential values and redacted before PR-Agent sees it. This catches
   exact values only.
 - Claude Code runs with its tools switched off, and Codex with its tool features switched off. Claude Code also

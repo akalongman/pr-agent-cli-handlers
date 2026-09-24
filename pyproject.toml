@@ -30,6 +30,9 @@ pr-agent-cli-handlers = "pr_agent_cli_handlers.cli:entrypoint"
 [dependency-groups]
 dev = ["pytest>=8.3", "pytest-asyncio>=0.24", "ruff>=0.6"]
 
+[tool.uv]
+required-version = ">=0.12"
+
 [tool.hatch.version]
 path = "src/pr_agent_cli_handlers/__init__.py"
 

@@ -23,7 +23,7 @@
 - Comments and docstrings are concise and imperative. No em dashes or en dashes anywhere (code, docs, commit messages); hyphens keep their normal use.
 - Commits: Conventional Commit titles, signed (commit signing is on; never bypass it), path-limited with `git add <paths> && git commit -m "<title>" -- <paths>`, no trailers, no mention of AI assistants. Never create or switch branches; never push.
 - Run tests with `uv run pytest -q` (the test `conftest.py` sets `LITELLM_LOCAL_MODEL_COST_MAP=True`). Local uv is 0.5.9.
-- Ported code comes from the fork branch at commit `6c707fe6`: `git -C /home/longman/projects/repositories/The-PR-Agent/pr-agent show 6c707fe6:<path>`.
+- Ported code comes from commit `6c707fe6` on the `feature/cli-ai-handlers` branch of the fork `akalongman/pr-agent`: `git -C <pr-agent checkout> show 6c707fe6:<path>`, where `<pr-agent checkout>` is a clone of that fork.
 
 ## Review Focus
 
@@ -540,7 +540,7 @@ git add src/pr_agent_cli_handlers/environment.py tests/test_environment.py && \
 
 - [ ] **Step 1: Port the test file**
 
-Run: `git -C /home/longman/projects/repositories/The-PR-Agent/pr-agent show 6c707fe6:tests/unittest/test_cli_ai_handler.py > tests/test_base.py`
+Run: `git -C <pr-agent checkout> show 6c707fe6:tests/unittest/test_cli_ai_handler.py > tests/test_base.py`
 
 Then apply these edits to `tests/test_base.py`:
 
@@ -975,7 +975,7 @@ def fake_cli(tmp_path, monkeypatch):
 
 - [ ] **Step 2: Port the test file**
 
-Run: `git -C /home/longman/projects/repositories/The-PR-Agent/pr-agent show 6c707fe6:tests/unittest/test_claude_code_ai_handler.py > tests/test_claude_code.py`
+Run: `git -C <pr-agent checkout> show 6c707fe6:tests/unittest/test_claude_code_ai_handler.py > tests/test_claude_code.py`
 
 Then apply these edits to `tests/test_claude_code.py`:
 
@@ -1154,7 +1154,7 @@ git add src/pr_agent_cli_handlers/claude_code.py tests/test_claude_code.py tests
 
 - [ ] **Step 1: Port the test file**
 
-Run: `git -C /home/longman/projects/repositories/The-PR-Agent/pr-agent show 6c707fe6:tests/unittest/test_codex_ai_handler.py > tests/test_codex.py`
+Run: `git -C <pr-agent checkout> show 6c707fe6:tests/unittest/test_codex_ai_handler.py > tests/test_codex.py`
 
 Then apply these edits to `tests/test_codex.py`:
 

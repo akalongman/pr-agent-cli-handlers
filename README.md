@@ -114,6 +114,8 @@ unknown slash command (a typo such as `/reviwe`) fails the run, unlike a failed 
 them with secrets present; the action never checks out pull request code, but a fork's diff can still carry
 instructions aimed at the reviewer.
 
+The action's own steps run on Node 24, so a self-hosted runner needs Actions Runner 2.327.1 or later.
+
 ## GitLab
 
 Include `templates/gitlab-ci.yml` from a release tag, or copy its job, and set these masked CI/CD variables (and

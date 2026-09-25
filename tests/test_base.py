@@ -449,6 +449,23 @@ async def test_non_string_text_from_parse_response_surfaces_as_cli_handler_error
         await _NonTextParserAdapter().chat_completion(model="m", system="s", user="u")
 
 
+class _BadModelsParserAdapter(_EchoAdapter):
+    def __init__(self, models):
+        super().__init__()
+        self.models = models
+
+    def parse_response(self, stdout):
+        return CliResponse(text="ok", models=self.models)
+
+
+@pytest.mark.parametrize("models", [None, "claude-opus-5", ["claude-opus-5"], (1,)])
+async def test_models_that_are_not_a_tuple_of_strings_surface_as_cli_handler_error(monkeypatch, models):
+    _install_settings(monkeypatch)
+
+    with pytest.raises(CliHandlerError, match="_BadModelsParserAdapter.*models"):
+        await _BadModelsParserAdapter(models).chat_completion(model="m", system="s", user="u")
+
+
 async def test_cli_handler_error_from_parse_response_propagates_unwrapped(monkeypatch):
     _install_settings(monkeypatch)
     reported = CliHandlerError("reported failure")

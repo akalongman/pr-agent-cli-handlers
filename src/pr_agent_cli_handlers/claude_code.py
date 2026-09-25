@@ -1,11 +1,12 @@
 """Run Claude Code headless (``claude -p``) once per call, in an empty working directory.
 
-Turn the harness into a plain completion: ``--system-prompt`` replaces its own system prompt,
-``--tools ""`` and ``--strict-mcp-config`` leave no tools and no MCP servers, ``--restricted`` skips
-settings files, ``--safe-mode`` skips CLAUDE.md and other customizations (skills, plugins, hooks), and
-``--no-session-persistence`` keeps nothing. The empty directory leaves no project CLAUDE.md to find, and
-``DISABLE_AUTOUPDATER=1`` keeps the installed version for every call. Authentication is the harness's own
-login; this adapter reads no credentials.
+Turn the harness into a plain completion: ``--system-prompt-file`` replaces its own system prompt with
+PR-Agent's, read from a file only this user can read, ``--tools ""`` and ``--strict-mcp-config`` leave no
+tools and no MCP servers, ``--restricted`` skips settings files, ``--safe-mode`` skips CLAUDE.md and other
+customizations (skills, plugins, hooks), and ``--no-session-persistence`` keeps nothing. A file, unlike an
+argument, has no 128 KiB limit and does not show in the process list. The empty directory leaves no project
+CLAUDE.md to find, and ``DISABLE_AUTOUPDATER=1`` keeps the installed version for every call. Authentication is
+the harness's own login; this adapter reads no credentials.
 """
 import json
 
@@ -31,6 +32,8 @@ class ClaudeCodeAIHandler(CliAIHandler):
     def __init__(self):
         super().__init__()
         self.workdir = self.create_workdir("pr-agent-claude-")
+        # Keep prompt files out of the working directory, so the CLI still starts in an empty one.
+        self.prompt_dir = self.create_workdir("pr-agent-claude-prompt-")
 
     def child_env(self) -> dict[str, str]:
         # Set it last, over a value passed through PR_AGENT_CLI_PASS_ENV: Claude Code otherwise updates itself in
@@ -49,17 +52,19 @@ class ClaudeCodeAIHandler(CliAIHandler):
         return name
 
     def build_command(self, model: str, system: str, user: str) -> CliCommand:
+        effort = self.reasoning_effort()
+        effort_args = ["--effort", effort] if effort in CLAUDE_CODE_EFFORTS else []
+        # Write the prompt file last: chat_completion removes it only once this returns, so nothing after the
+        # write may raise.
+        prompt_file = self.write_private_file(self.prompt_dir, system, "system-prompt-")
         argv = [
             self.binary, "-p",
             "--restricted", "--safe-mode", "--strict-mcp-config", "--tools", "",
             "--no-session-persistence", "--output-format", "json",
-            "--system-prompt", system, "--model", model,
+            "--system-prompt-file", prompt_file, "--model", model,
+            *effort_args, *self.extra_args,
         ]
-        effort = self.reasoning_effort()
-        if effort in CLAUDE_CODE_EFFORTS:
-            argv += ["--effort", effort]
-        argv += self.extra_args
-        return CliCommand(argv=argv, stdin=user, cwd=self.workdir)
+        return CliCommand(argv=argv, stdin=user, cwd=self.workdir, temp_files=[prompt_file])
 
     def parse_response(self, stdout: str) -> CliResponse:
         try:

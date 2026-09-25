@@ -132,6 +132,8 @@ Do not run parent-project pipelines for merge requests from forks while these va
   exact values only.
 - Claude Code runs with its tools switched off, and Codex with its tool features switched off. Claude Code also
   runs with `DISABLE_AUTOUPDATER=1`, so the installed (pinned) version serves every call of a job.
+- Claude Code reads PR-Agent's system prompt from a file only you can read, removed after each call, so it does not
+  appear in the process list. Codex still receives it as a command-line argument.
 - Model names must be plain identifiers, because a repository can set `config.model`.
 
 ## Limitations
@@ -140,6 +142,8 @@ Do not run parent-project pipelines for merge requests from forks while these va
 - MOSAICO is not supported: it calls LiteLLM directly.
 - The package includes an experimental adapter for the Antigravity CLI (`agy`) that is not selectable, because
   on agy 1.2.9 it failed the live gate (its reviews derail into tool use it cannot switch off).
+- With the Codex handler, PR-Agent's system prompt (including `extra_instructions`) must stay under about
+  120,000 bytes, because it travels as one command-line argument.
 
 ## Development
 

@@ -36,14 +36,21 @@ def _success_payload(**overrides):
 def test_build_command_uses_the_restricted_headless_flag_set(monkeypatch):
     _install_settings(monkeypatch, {"CONFIG.REASONING_EFFORT": "xhigh"})
     monkeypatch.setenv("PR_AGENT_CLI_EXTRA_ARGS", "--verbose")
-    command = ClaudeCodeAIHandler().build_command("claude-opus-5", "SYS", "USER")
+    handler = ClaudeCodeAIHandler()
+    command = handler.build_command("claude-opus-5", "SYS", "USER")
+    prompt_file = command.argv[command.argv.index("--system-prompt-file") + 1]
 
     assert command.argv == [
         "claude", "-p", "--restricted", "--safe-mode", "--strict-mcp-config", "--tools", "",
-        "--no-session-persistence", "--output-format", "json", "--system-prompt", "SYS", "--model", "claude-opus-5",
-        "--effort", "xhigh", "--verbose",
+        "--no-session-persistence", "--output-format", "json", "--system-prompt-file", prompt_file,
+        "--model", "claude-opus-5", "--effort", "xhigh", "--verbose",
     ]
     assert command.stdin == "USER"
+    assert command.temp_files == [prompt_file]
+    assert "SYS" not in command.argv
+    assert os.path.dirname(prompt_file) == handler.prompt_dir
+    with open(prompt_file, encoding="utf-8") as handle:
+        assert handle.read() == "SYS"
 
 
 def test_build_command_runs_in_one_empty_workdir_per_handler(monkeypatch):
@@ -54,8 +61,40 @@ def test_build_command_runs_in_one_empty_workdir_per_handler(monkeypatch):
     second = handler.build_command("claude-opus-5", "SYS", "USER")
 
     assert first.cwd == second.cwd == handler.workdir
+    assert handler.prompt_dir != handler.workdir
     assert os.path.isdir(handler.workdir)
     assert os.listdir(handler.workdir) == []
+
+
+def test_build_command_writes_a_new_prompt_file_per_call(monkeypatch):
+    _install_settings(monkeypatch)
+    handler = ClaudeCodeAIHandler()
+
+    first = handler.build_command("claude-opus-5", "ONE", "USER").temp_files
+    second = handler.build_command("claude-opus-5", "TWO", "USER").temp_files
+
+    assert first != second
+    assert sorted(os.listdir(handler.prompt_dir)) == sorted(os.path.basename(p) for p in first + second)
+
+
+def test_prompt_dir_is_readable_by_its_owner_only(monkeypatch):
+    _install_settings(monkeypatch)
+    handler = ClaudeCodeAIHandler()
+    assert os.stat(handler.prompt_dir).st_mode & 0o777 == 0o700
+
+
+def test_build_command_leaves_no_prompt_file_when_reading_the_effort_fails(monkeypatch):
+    _install_settings(monkeypatch)
+    handler = ClaudeCodeAIHandler()
+
+    def fail():
+        raise RuntimeError("settings unavailable")
+
+    monkeypatch.setattr(handler, "reasoning_effort", fail)
+
+    with pytest.raises(RuntimeError, match="settings unavailable"):
+        handler.build_command("claude-opus-5", "SYS", "USER")
+    assert os.listdir(handler.prompt_dir) == []
 
 
 def test_build_command_omits_effort_the_harness_does_not_accept(monkeypatch):
@@ -210,8 +249,26 @@ async def test_contract_runs_the_claude_binary_with_the_built_command(monkeypatc
     text, finish_reason = await handler.chat_completion(model="anthropic/claude-opus-5", system="SYS", user="USER")
 
     recorded = json.loads(record.read_text())
+    prompt_file = recorded["argv"][recorded["argv"].index("--system-prompt-file") + 1]
     assert (text, finish_reason) == ("looks good", "stop")
-    assert recorded["argv"] == handler.build_command("claude-opus-5", "SYS", "USER").argv[1:]
+    assert os.path.dirname(prompt_file) == handler.prompt_dir
+    assert recorded["system_prompt"] == "SYS"
+    assert "SYS" not in recorded["argv"]
     assert recorded["stdin"] == "USER"
     assert recorded["cwd"] == handler.workdir
     assert recorded["cwd"] != os.getcwd()
+    assert os.listdir(handler.prompt_dir) == []
+
+
+async def test_contract_passes_a_system_prompt_larger_than_one_argument_allows(monkeypatch, fake_cli):
+    _install_settings(monkeypatch)
+    record = fake_cli("claude", _success_payload(result="ok"))
+    # 200,000 bytes, above Linux's 131,072-byte limit for one argument.
+    system = "rule line\n" * 20_000
+    handler = ClaudeCodeAIHandler()
+
+    await handler.chat_completion(model="claude-opus-5", system=system, user="USER")
+
+    recorded = json.loads(record.read_text())
+    assert recorded["system_prompt"] == system
+    assert all(len(arg.encode("utf-8")) <= cli_module.MAX_ARGV_ELEMENT_BYTES for arg in recorded["argv"])

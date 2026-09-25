@@ -73,6 +73,21 @@ def test_write_private_file_creates_an_owner_only_file_with_the_text(tmp_path):
     assert os.stat(path).st_mode & 0o777 == 0o600
 
 
+def test_write_private_file_writes_line_endings_unchanged(monkeypatch, tmp_path):
+    real_fdopen = os.fdopen
+
+    def windows_fdopen(fd, *args, newline=None, **kwargs):
+        """Translate "\\n" to "\\r\\n" unless the caller sets ``newline``, as text mode does on Windows."""
+        return real_fdopen(fd, *args, newline="\r\n" if newline is None else newline, **kwargs)
+
+    monkeypatch.setattr(os, "fdopen", windows_fdopen)
+
+    path = CliAIHandler.write_private_file(str(tmp_path), "one\ntwo\r\n", "system-prompt-")
+
+    with open(path, "rb") as handle:
+        assert handle.read() == b"one\ntwo\r\n"
+
+
 def test_write_private_file_uses_a_new_name_per_call(tmp_path):
     first = CliAIHandler.write_private_file(str(tmp_path), "a", "system-prompt-")
     second = CliAIHandler.write_private_file(str(tmp_path), "a", "system-prompt-")

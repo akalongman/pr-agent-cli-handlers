@@ -127,7 +127,8 @@ class CliAIHandler(BaseAiHandler):
         except OSError as e:
             raise CliHandlerError(f"cannot create a private file in {directory}: {e}") from e
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            # Write line endings as given; text mode would turn "\n" into "\r\n" on Windows.
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
                 handle.write(text)
         except UnicodeEncodeError as e:
             with suppress(FileNotFoundError):

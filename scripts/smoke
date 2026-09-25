@@ -30,8 +30,9 @@ for diff in "$@"; do
       "$out/$name.json"; then
     echo "ok   $name"
   else
-    echo "FAIL $name (output and logs in $out)"
+    echo "FAIL $name"
     status=1
   fi
 done
+echo "output and logs in $out"
 exit "$status"

@@ -53,7 +53,8 @@ class ClaudeCodeAIHandler(CliAIHandler):
 
     def build_command(self, model: str, system: str, user: str) -> CliCommand:
         effort = self.reasoning_effort()
-        effort_args = ["--effort", effort] if effort in CLAUDE_CODE_EFFORTS else []
+        passed_effort = effort if effort in CLAUDE_CODE_EFFORTS else None
+        effort_args = ["--effort", passed_effort] if passed_effort else []
         # Write the prompt file last: chat_completion removes it only once this returns, so nothing after the
         # write may raise.
         prompt_file = self.write_private_file(self.prompt_dir, system, "system-prompt-")
@@ -64,7 +65,7 @@ class ClaudeCodeAIHandler(CliAIHandler):
             "--system-prompt-file", prompt_file, "--model", model,
             *effort_args, *self.extra_args,
         ]
-        return CliCommand(argv=argv, stdin=user, cwd=self.workdir, temp_files=[prompt_file])
+        return CliCommand(argv=argv, stdin=user, cwd=self.workdir, temp_files=[prompt_file], effort=passed_effort)
 
     def parse_response(self, stdout: str) -> CliResponse:
         try:
@@ -88,6 +89,10 @@ class ClaudeCodeAIHandler(CliAIHandler):
         completion_tokens = int(usage.get("output_tokens") or 0)
         finish_reason = "length" if data.get("stop_reason") == "max_tokens" else "stop"
         cost = data.get("total_cost_usd")
+        model_usage = data.get("modelUsage")
+        models = tuple(
+            name for name in model_usage if isinstance(name, str) and MODEL_NAME.fullmatch(name)
+        ) if isinstance(model_usage, dict) else ()
         return CliResponse(text=data.get("result") or "", finish_reason=finish_reason,
                            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
-                           cost_usd=float(cost) if cost else None)
+                           cost_usd=float(cost) if cost else None, models=models)

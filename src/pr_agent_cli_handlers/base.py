@@ -46,6 +46,8 @@ class CliCommand:
     cwd: Optional[str] = None
     # Remove these files once the call ends, whatever its outcome.
     temp_files: list[str] = field(default_factory=list)
+    # The reasoning effort the adapter passed to the CLI, or None when it passed none.
+    effort: Optional[str] = None
 
 
 @dataclass
@@ -55,6 +57,8 @@ class CliResponse:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost_usd: Optional[float] = None
+    # The models the CLI reports it used, when it reports them.
+    models: tuple[str, ...] = ()
 
 
 class CliAIHandler(BaseAiHandler):
@@ -191,15 +195,20 @@ class CliAIHandler(BaseAiHandler):
                 f"{type(self).__name__}: cannot parse the output of {command.argv[0]}: {type(e).__name__}: {e}",
                 secrets)) from e
         response.text = redact(response.text, secrets)
-        get_logger().info("AI response", response=response.text, finish_reason=response.finish_reason,
-                          model=mapped_model, prompt_tokens=response.prompt_tokens,
-                          completion_tokens=response.completion_tokens)
+        # Prefer the model the CLI reports: an alias such as ``opus`` resolves to a concrete model there.
+        reported_model = response.models[0] if len(response.models) == 1 else mapped_model
+        get_logger().info(
+            f"AI response from {reported_model} (effort {command.effort or 'default'}): "
+            f"{response.prompt_tokens} prompt tokens, {response.completion_tokens} completion tokens",
+            response=response.text, finish_reason=response.finish_reason, model=mapped_model,
+            models_used=list(response.models), effort=command.effort,
+            prompt_tokens=response.prompt_tokens, completion_tokens=response.completion_tokens)
         usage = {
             "prompt_tokens": response.prompt_tokens,
             "completion_tokens": response.completion_tokens,
             "total_tokens": response.prompt_tokens + response.completion_tokens,
         }
-        record_ai_call(usage, model=mapped_model, cost_usd=response.cost_usd)
+        record_ai_call(usage, model=reported_model, cost_usd=response.cost_usd)
         return response.text, response.finish_reason
 
     async def _run(self, command: CliCommand) -> str:

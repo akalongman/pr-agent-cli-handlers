@@ -338,6 +338,68 @@ async def test_chat_completion_logs_the_prompts_as_a_debug_artifact(monkeypatch)
     assert debug_calls == [("Prompts", {"artifact": {"system": "sys", "user": "usr"}})]
 
 
+class _ModelReportingAdapter(_EchoAdapter):
+    def __init__(self, models=("real-model-1",)):
+        super().__init__()
+        self.models = models
+
+    def build_command(self, model, system, user):
+        command = super().build_command(model, system, user)
+        command.effort = "high"
+        return command
+
+    def parse_response(self, stdout):
+        return CliResponse(text="ok", prompt_tokens=7, completion_tokens=3, cost_usd=0.5, models=self.models)
+
+
+async def test_chat_completion_logs_the_reported_model_and_effort(monkeypatch):
+    _install_settings(monkeypatch)
+    infos = []
+    monkeypatch.setattr(cli_module, "get_logger", lambda: SimpleNamespace(
+        info=lambda msg, **kw: infos.append((msg, kw)), warning=lambda *a, **kw: None, debug=lambda *a, **kw: None))
+
+    await _ModelReportingAdapter().chat_completion(model="anthropic/claude-opus-5", system="s", user="u")
+
+    message, fields = infos[-1]
+    assert message == "AI response from real-model-1 (effort high): 7 prompt tokens, 3 completion tokens"
+    assert fields["model"] == "claude-opus-5"
+    assert fields["models_used"] == ["real-model-1"]
+    assert fields["effort"] == "high"
+
+
+async def test_chat_completion_logs_the_requested_model_and_default_effort_without_reports(monkeypatch):
+    _install_settings(monkeypatch)
+    infos = []
+    monkeypatch.setattr(cli_module, "get_logger", lambda: SimpleNamespace(
+        info=lambda msg, **kw: infos.append((msg, kw)), warning=lambda *a, **kw: None, debug=lambda *a, **kw: None))
+
+    await _EchoAdapter().chat_completion(model="anthropic/claude-opus-5", system="s", user="u")
+
+    message, fields = infos[-1]
+    assert message == "AI response from claude-opus-5 (effort default): 7 prompt tokens, 3 completion tokens"
+    assert fields["models_used"] == []
+    assert fields["effort"] is None
+
+
+async def test_chat_completion_records_cost_under_the_single_reported_model(monkeypatch):
+    _install_settings(monkeypatch)
+    init_run_details()
+
+    await _ModelReportingAdapter().chat_completion(model="anthropic/claude-opus-5", system="s", user="u")
+
+    assert list(get_run_details().model_costs_usd) == ["real-model-1"]
+
+
+@pytest.mark.parametrize("models", [(), ("model-a", "model-b")])
+async def test_chat_completion_records_cost_under_the_requested_model_otherwise(monkeypatch, models):
+    _install_settings(monkeypatch)
+    init_run_details()
+
+    await _ModelReportingAdapter(models=models).chat_completion(model="anthropic/claude-opus-5", system="s", user="u")
+
+    assert list(get_run_details().model_costs_usd) == ["claude-opus-5"]
+
+
 async def test_oversized_argv_element_raises_before_running(monkeypatch):
     _install_settings(monkeypatch)
     handler = _EchoAdapter()

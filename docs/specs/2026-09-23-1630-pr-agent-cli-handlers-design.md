@@ -59,8 +59,8 @@ A follow-up comment argued for part 1 together with a `register_ai_handler` hook
 - **R10.** Before returning a response, the handler replaces every occurrence of a credential value with `[REDACTED]`. Credential values are the values of the adapter's allowlisted credential variables, plus any variable in the parent environment whose name contains `TOKEN`, `KEY`, `SECRET` or `PASSWORD` (compared case-insensitively) and whose value is at least 8 characters long. This is defense in depth for adapters that keep tool access; it does not catch encoded or transformed secrets.
 - **R11.** No command-line argument exceeds 120,000 bytes. Adapters pass the user prompt on standard input, and the Claude Code adapter passes the system prompt through a file. The Codex adapter's system prompt still travels in argv as `developer_instructions` and is bounded by this limit.
 - **R12.** A timeout kills the CLI's whole process group.
-- **R13.** Prompts are logged at debug level (`get_logger().debug("Prompts", artifact={...})`, PR-Agent's own idiom), and the response at info level. No credential is ever logged.
-- **R14.** Each successful call is recorded with PR-Agent's `record_ai_call`, with token counts and cost when the CLI reports them.
+- **R13.** Prompts are logged at debug level (`get_logger().debug("Prompts", artifact={...})`, PR-Agent's own idiom), and the response at info level with a message naming the model the CLI reports (or the requested one) and the effort the adapter passed. No credential is ever logged.
+- **R14.** Each successful call is recorded with PR-Agent's `record_ai_call`, with token counts and cost when the CLI reports them, under the model the CLI reports when it reports exactly one, else the requested model.
 - **R15.** No automated test runs a real agent CLI.
 
 ## Design
@@ -124,7 +124,7 @@ The model, fallback models and reasoning effort still come from PR-Agent's setti
 
 - **Failure contract:** R8, including the NUL-byte and non-list cases fixed on the branch. With environment variables, `extra_args` is always a string, so only the unparseable case remains.
 - **Size and process control:** the 120,000-byte argument guard (R11) and process-group kill (R12). The CLI starts in its own session (`start_new_session=True` on POSIX).
-- **Logging and accounting:** R13 and R14.
+- **Logging and accounting:** R13 and R14, which now also name the model and effort of each call.
 - **Images:** `supports_images = False`; an image path is logged as ignored.
 
 **Claude Code adapter** (argument list as at `6c707fe6`, with the system prompt read from a file):
@@ -239,7 +239,7 @@ Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/
 | Secrets in fork pipelines | CI trigger choice | The documented triggers are `pull_request` and `issue_comment`, plus GitLab masked variables (hidden where GitLab offers it), with the trade-off of protecting them documented. Running parent pipelines for fork merge requests is warned against |
 | Supply chain of the CLI | Installer fetched at job start | Versions are pinned by default, and Claude Code runs with `DISABLE_AUTOUPDATER=1` so it cannot update itself between calls |
 | Subscription token misuse | A leaked token cannot be scoped or capped | Documentation recommends API keys with spending limits for shared repositories |
-| Process list exposure | The system prompt is an argument for Claude Code and Codex | Accepted. The system prompt is PR-Agent's template plus pull request metadata; credentials never appear in arguments |
+| Process list exposure | The system prompt is an argument for Codex | Accepted. The system prompt is PR-Agent's template plus pull request metadata; credentials never appear in arguments. Claude Code reads it from a file only the user can read |
 
 ## Testing
 

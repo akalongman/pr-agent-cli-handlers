@@ -103,6 +103,12 @@ def test_build_command_omits_effort_the_harness_does_not_accept(monkeypatch):
     assert "--effort" not in command.argv
 
 
+@pytest.mark.parametrize("configured, passed", [("xhigh", "xhigh"), ("minimal", None), ("", None)])
+def test_build_command_reports_the_effort_it_passes(monkeypatch, configured, passed):
+    _install_settings(monkeypatch, {"CONFIG.REASONING_EFFORT": configured})
+    assert ClaudeCodeAIHandler().build_command("claude-opus-5", "SYS", "USER").effort == passed
+
+
 @pytest.mark.parametrize("given, expected", [
     ("anthropic/claude-opus-5", "claude-opus-5"),
     ("bedrock/anthropic.claude-sonnet-5", "claude-sonnet-5"),
@@ -158,6 +164,25 @@ def test_parse_response_raises_on_non_json(monkeypatch):
     _install_settings(monkeypatch)
     with pytest.raises(CliHandlerError, match="JSON"):
         ClaudeCodeAIHandler().parse_response("plain text")
+
+
+def test_parse_response_reads_the_models_the_cli_reports(monkeypatch):
+    _install_settings(monkeypatch)
+    payload = _success_payload(modelUsage={"claude-opus-5": {"inputTokens": 2, "outputTokens": 30}})
+    assert ClaudeCodeAIHandler().parse_response(payload).models == ("claude-opus-5",)
+
+
+@pytest.mark.parametrize("model_usage", [[], "claude-opus-5", None])
+def test_parse_response_reports_no_models_without_a_model_usage_object(monkeypatch, model_usage):
+    _install_settings(monkeypatch)
+    payload = _success_payload(modelUsage=model_usage)
+    assert ClaudeCodeAIHandler().parse_response(payload).models == ()
+
+
+def test_parse_response_skips_model_names_outside_the_model_pattern(monkeypatch):
+    _install_settings(monkeypatch)
+    payload = _success_payload(modelUsage={"--flag": {}, "a{b}": {}, "claude-sonnet-5": {}})
+    assert ClaudeCodeAIHandler().parse_response(payload).models == ("claude-sonnet-5",)
 
 
 async def test_chat_completion_raises_cli_handler_error_on_non_numeric_usage(monkeypatch):

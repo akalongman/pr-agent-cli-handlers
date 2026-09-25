@@ -60,15 +60,16 @@ class CodexAIHandler(CliAIHandler):
         argv += ["--config", "developer_instructions=" + toml_basic_string(system)]
         effort = self.reasoning_effort()
         effort = CODEX_EFFORT_ALIASES.get(effort, effort)
-        if effort in CODEX_EFFORTS:
-            argv += ["--config", f'model_reasoning_effort="{effort}"']
+        passed_effort = effort if effort in CODEX_EFFORTS else None
+        if passed_effort:
+            argv += ["--config", f'model_reasoning_effort="{passed_effort}"']
         argv += [
             "exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
             "--skip-git-repo-check", "--color", "never", "--cd", self.workdir,
         ]
         argv += self.extra_args
         argv.append("-")
-        return CliCommand(argv=argv, stdin=user)
+        return CliCommand(argv=argv, stdin=user, effort=passed_effort)
 
     def parse_response(self, stdout: str) -> CliResponse:
         text = last_error = None

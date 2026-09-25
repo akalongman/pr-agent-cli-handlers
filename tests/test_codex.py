@@ -89,6 +89,12 @@ def test_build_command_maps_reasoning_effort(monkeypatch, effort, expected):
     assert f'model_reasoning_effort="{expected}"' in command.argv
 
 
+@pytest.mark.parametrize("configured, passed", [("minimal", "low"), ("high", "high"), ("turbo", None)])
+def test_build_command_reports_the_effort_it_passes(monkeypatch, configured, passed):
+    _install_settings(monkeypatch, {"CONFIG.REASONING_EFFORT": configured})
+    assert CodexAIHandler().build_command("gpt-6", "SYS", "USER").effort == passed
+
+
 def test_parse_response_takes_the_agent_message_and_turn_usage(monkeypatch):
     _install_settings(monkeypatch)
     stdout = _events(

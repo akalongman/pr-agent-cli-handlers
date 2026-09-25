@@ -49,6 +49,210 @@ def _install_settings(monkeypatch, values=None, ai_timeout=30):
     monkeypatch.setattr(cli_module, "get_settings", lambda: _FakeSettings(values, ai_timeout))
 
 
+class _FileAdapter(_EchoAdapter):
+    """Write the system prompt to a private file, as the Claude Code adapter does."""
+
+    def __init__(self, directory):
+        super().__init__()
+        self.directory = directory
+        self.written = []
+
+    def build_command(self, model, system, user):
+        path = self.write_private_file(self.directory, system, "system-prompt-")
+        self.written.append(path)
+        return CliCommand(argv=[self.binary, "--system-prompt-file", path], stdin=user, temp_files=[path])
+
+
+def test_write_private_file_creates_an_owner_only_file_with_the_text(tmp_path):
+    path = CliAIHandler.write_private_file(str(tmp_path), "héllo\nworld", "system-prompt-")
+
+    assert os.path.dirname(path) == str(tmp_path)
+    assert os.path.basename(path).startswith("system-prompt-")
+    with open(path, encoding="utf-8") as handle:
+        assert handle.read() == "héllo\nworld"
+    assert os.stat(path).st_mode & 0o777 == 0o600
+
+
+def test_write_private_file_uses_a_new_name_per_call(tmp_path):
+    first = CliAIHandler.write_private_file(str(tmp_path), "a", "system-prompt-")
+    second = CliAIHandler.write_private_file(str(tmp_path), "a", "system-prompt-")
+    assert first != second
+
+
+def test_write_private_file_rejects_text_that_is_not_valid_unicode(tmp_path):
+    with pytest.raises(CliHandlerError, match="UTF-8"):
+        CliAIHandler.write_private_file(str(tmp_path), "bad \ud800 surrogate", "system-prompt-")
+    assert os.listdir(tmp_path) == []
+
+
+def test_write_private_file_raises_when_the_directory_is_missing(tmp_path):
+    missing = tmp_path / "gone"
+
+    with pytest.raises(CliHandlerError, match="gone") as exc_info:
+        CliAIHandler.write_private_file(str(missing), "a", "system-prompt-")
+    assert isinstance(exc_info.value.__cause__, FileNotFoundError)
+
+
+def test_write_private_file_removes_the_file_when_the_write_fails(monkeypatch, tmp_path):
+    real_fdopen = os.fdopen
+
+    class _FullDisk:
+        """Open the real file, then fail every write as a full disk does."""
+
+        def __init__(self, fd, *args, **kwargs):
+            self.handle = real_fdopen(fd, *args, **kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            self.handle.close()
+
+        def write(self, text):
+            raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+
+    monkeypatch.setattr(cli_module.os, "fdopen", _FullDisk)
+
+    with pytest.raises(CliHandlerError, match=os.strerror(errno.ENOSPC)) as exc_info:
+        CliAIHandler.write_private_file(str(tmp_path), "a", "system-prompt-")
+    assert exc_info.value.__cause__.errno == errno.ENOSPC
+    assert os.listdir(tmp_path) == []
+
+
+async def test_chat_completion_removes_the_command_temp_files_after_the_run(monkeypatch, tmp_path):
+    _install_settings(monkeypatch)
+    handler = _FileAdapter(str(tmp_path))
+    seen = {}
+
+    async def run(command):
+        with open(command.argv[2], encoding="utf-8") as handle:
+            seen["content"] = handle.read()
+        return "ok"
+
+    handler._run = run
+
+    await handler.chat_completion(model="m", system="SYS", user="u")
+
+    assert seen["content"] == "SYS"
+    assert os.listdir(tmp_path) == []
+
+
+async def test_chat_completion_removes_temp_files_when_the_run_fails(monkeypatch, tmp_path):
+    _install_settings(monkeypatch)
+    handler = _FileAdapter(str(tmp_path))
+
+    async def run(command):
+        raise CliHandlerError("boom")
+
+    handler._run = run
+
+    with pytest.raises(CliHandlerError, match="boom"):
+        await handler.chat_completion(model="m", system="SYS", user="u")
+    assert os.listdir(tmp_path) == []
+
+
+async def test_chat_completion_removes_temp_files_when_an_argument_is_too_long(monkeypatch, tmp_path):
+    _install_settings(monkeypatch)
+
+    class _LongArgAdapter(_FileAdapter):
+        def build_command(self, model, system, user):
+            command = super().build_command(model, system, user)
+            command.argv.append("x" * (MAX_ARGV_ELEMENT_BYTES + 1))
+            return command
+
+    handler = _LongArgAdapter(str(tmp_path))
+
+    with pytest.raises(CliHandlerError, match="exceeds"):
+        await handler.chat_completion(model="m", system="SYS", user="u")
+    assert os.listdir(tmp_path) == []
+
+
+async def test_chat_completion_removes_temp_files_when_the_call_is_cancelled(monkeypatch, tmp_path):
+    _install_settings(monkeypatch)
+    handler = _FileAdapter(str(tmp_path))
+    started = asyncio.Event()
+
+    async def run(command):
+        started.set()
+        await asyncio.sleep(3600)
+
+    handler._run = run
+
+    task = asyncio.create_task(handler.chat_completion(model="m", system="SYS", user="u"))
+    # Bound the wait: if the call fails before it runs, the event never fires and the test would hang.
+    await asyncio.wait_for(started.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert os.listdir(tmp_path) == []
+
+
+async def test_parallel_calls_write_and_remove_separate_files(monkeypatch, tmp_path):
+    _install_settings(monkeypatch)
+    handler = _FileAdapter(str(tmp_path))
+    contents = []
+
+    async def run(command):
+        await asyncio.sleep(0.01)
+        with open(command.argv[2], encoding="utf-8") as handle:
+            contents.append(handle.read())
+        return "ok"
+
+    handler._run = run
+
+    await asyncio.gather(*(handler.chat_completion(model="m", system=f"SYS{i}", user="u") for i in range(5)))
+
+    assert sorted(contents) == [f"SYS{i}" for i in range(5)]
+    assert len(set(handler.written)) == 5
+    assert os.listdir(tmp_path) == []
+
+
+def _fail_to_remove(monkeypatch, handler):
+    """Make removing the handler's written files fail with PermissionError, and collect the logged warnings."""
+    warnings = []
+    monkeypatch.setattr(cli_module, "get_logger", lambda: SimpleNamespace(
+        warning=lambda msg, **kw: warnings.append(msg), info=lambda *a, **kw: None, debug=lambda *a, **kw: None))
+    real_remove = os.remove
+
+    def remove(path):
+        if path in handler.written:
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), path)
+        real_remove(path)
+
+    monkeypatch.setattr(cli_module.os, "remove", remove)
+    return warnings
+
+
+async def test_a_temp_file_that_cannot_be_removed_does_not_change_the_result(monkeypatch, tmp_path):
+    _install_settings(monkeypatch)
+    handler = _FileAdapter(str(tmp_path))
+    warnings = _fail_to_remove(monkeypatch, handler)
+
+    response = await handler.chat_completion(model="m", system="SYS", user="u")
+
+    assert response == ("CANNED", "stop")
+    assert len(warnings) == 1
+    assert handler.written[0] in warnings[0]
+    assert os.strerror(errno.EACCES) in warnings[0]
+
+
+async def test_a_temp_file_that_cannot_be_removed_does_not_replace_the_run_error(monkeypatch, tmp_path):
+    _install_settings(monkeypatch)
+    handler = _FileAdapter(str(tmp_path))
+    warnings = _fail_to_remove(monkeypatch, handler)
+    raised = CliHandlerError("boom")
+
+    async def run(command):
+        raise raised
+
+    handler._run = run
+
+    with pytest.raises(CliHandlerError) as exc_info:
+        await handler.chat_completion(model="m", system="SYS", user="u")
+    assert exc_info.value is raised
+    assert len(warnings) == 1
+
+
 def test_environment_supplies_binary_extra_args_and_timeout(monkeypatch):
     _install_settings(monkeypatch)
     monkeypatch.setenv("PR_AGENT_CLI_BINARY", "/opt/echo")

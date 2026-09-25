@@ -14,7 +14,7 @@ import tempfile
 import weakref
 from abc import abstractmethod
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
@@ -44,6 +44,8 @@ class CliCommand:
     argv: list[str]
     stdin: Optional[str] = None
     cwd: Optional[str] = None
+    # Remove these files once the call ends, whatever its outcome.
+    temp_files: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -110,6 +112,44 @@ class CliAIHandler(BaseAiHandler):
         weakref.finalize(self, shutil.rmtree, workdir, ignore_errors=True)
         return workdir
 
+    @staticmethod
+    def write_private_file(directory: str, text: str, prefix: str) -> str:
+        """Write ``text`` to a new file in ``directory`` that only this user can read, and return its path.
+
+        Use a new name per call: parallel calls on one handler share its directories.
+        """
+        try:
+            fd, path = tempfile.mkstemp(prefix=prefix, suffix=".txt", dir=directory)
+        except OSError as e:
+            raise CliHandlerError(f"cannot create a private file in {directory}: {e}") from e
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(text)
+        except UnicodeEncodeError as e:
+            with suppress(FileNotFoundError):
+                os.remove(path)
+            raise CliHandlerError(f"cannot write the prompt as UTF-8: {e.reason}") from e
+        except OSError as e:
+            with suppress(FileNotFoundError):
+                os.remove(path)
+            raise CliHandlerError(f"cannot write the private file {path}: {e}") from e
+        except BaseException:
+            with suppress(FileNotFoundError):
+                os.remove(path)
+            raise
+        return path
+
+    @staticmethod
+    def _remove_temp_files(command: CliCommand) -> None:
+        """Remove the command's temporary files; log a failure instead of raising it, since this runs in finally."""
+        for path in command.temp_files:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                get_logger().warning(f"Cannot remove the temporary file {path}: {e}")
+
     def child_env(self) -> dict[str, str]:
         """Return the environment the CLI receives: base names, this adapter's names, PR_AGENT_CLI_PASS_ENV."""
         return build_child_env(os.environ, self.credential_env | self.config_env, self.pass_env)
@@ -124,13 +164,16 @@ class CliAIHandler(BaseAiHandler):
                 f"Image path is not supported for {type(self).__name__}. Ignoring image path: {img_path}")
         mapped_model = self.map_model(model)
         command = self.build_command(mapped_model, system, user)
-        for arg in command.argv:
-            if len(arg.encode("utf-8")) > MAX_ARGV_ELEMENT_BYTES:
-                raise CliHandlerError(
-                    f"{type(self).__name__}: a command argument exceeds {MAX_ARGV_ELEMENT_BYTES} bytes; "
-                    "the prompt does not fit in one argv element")
-        get_logger().debug("Prompts", artifact={"system": system, "user": user})
-        stdout = await self._run(command)
+        try:
+            for arg in command.argv:
+                if len(arg.encode("utf-8")) > MAX_ARGV_ELEMENT_BYTES:
+                    raise CliHandlerError(
+                        f"{type(self).__name__}: a command argument exceeds {MAX_ARGV_ELEMENT_BYTES} bytes; "
+                        "the prompt does not fit in one argv element")
+            get_logger().debug("Prompts", artifact={"system": system, "user": user})
+            stdout = await self._run(command)
+        finally:
+            self._remove_temp_files(command)
         # Redact again after parsing: JSON escaping (a quote, a backslash) hides a credential from the redaction
         # _run applies to the raw stdout, and decoding restores the plain value.
         secrets = self.credential_values()

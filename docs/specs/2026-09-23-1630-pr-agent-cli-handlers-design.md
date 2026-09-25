@@ -247,7 +247,7 @@ Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/
   - the handler tests carried over from the branch, adjusted to environment variables
   - activation: a real seam check on the installed PR-Agent; a clear exit on a stand-in class whose constructor lacks the default; default replacement on all listed constructors; argument pass-through to `pr_agent.cli.run`; exit before start on an invalid `PR_AGENT_CLI_HANDLER`
   - security: sentinel values in `GITHUB_TOKEN`, `GITLAB__PERSONAL_ACCESS_TOKEN`, `CI_JOB_TOKEN` and the other adapters' credential variables never reach the child environment, logs or error messages; the adapter's own credential variables do; a response containing a sentinel value is redacted; invalid model names are rejected
-- **Adapter contract tests:** a fake executable per CLI placed on `PATH` records its arguments and standard input and replays recorded output, including error envelopes and every `agy` status value.
+- **Adapter contract tests:** a fake executable per CLI placed on `PATH` records its arguments, its standard input and the content of the file passed with `--system-prompt-file` while the call runs, and replays recorded output, including error envelopes and every `agy` status value.
 - **Live smoke test** (`scripts/smoke`, manual): runs `review` through each installed CLI against three small sample diffs in PR-Agent's plain-diff mode (`--diff-file`, with `--json-output` as the parse check). Run before every release.
 - **Lint:** Ruff with PR-Agent's rules (E, F, B, I; 120 columns), so the code stays portable back to PR-Agent.
 

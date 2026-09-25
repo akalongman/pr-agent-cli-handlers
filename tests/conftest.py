@@ -23,7 +23,11 @@ def _clear_handler_environment(monkeypatch):
 
 @pytest.fixture
 def fake_cli(tmp_path, monkeypatch):
-    """Put a fake CLI on PATH that records its arguments, stdin and cwd, prints canned output and exits."""
+    """Put a fake CLI on PATH that records its call, prints canned output and exits.
+
+    The record holds the arguments, stdin, cwd and the content of the ``--system-prompt-file`` file, read while the
+    call runs because the handler removes the file afterwards.
+    """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")

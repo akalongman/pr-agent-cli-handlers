@@ -86,6 +86,7 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review, synchronize]
   issue_comment:
+    types: [created]
 jobs:
   pr_agent_job:
     if: ${{ github.event.sender.type != 'Bot' && (github.event_name != 'issue_comment' || (github.event.issue.pull_request && startsWith(github.event.comment.body, '/'))) }}

@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import yaml
@@ -64,11 +65,18 @@ def test_release_workflow_publishes_through_trusted_publishing():
     assert workflow[True]["push"]["tags"] == ["v*"]
     assert job["permissions"]["id-token"] == "write"
     uses = [step.get("uses", "") for step in job["steps"]]
-    assert "pypa/gh-action-pypi-publish@release/v1" in uses
+    assert re.fullmatch(r"pypa/gh-action-pypi-publish@[0-9a-f]{40}", uses[-1])
     assert "password" not in (ROOT / ".github" / "workflows" / "release.yml").read_text()
     assert job["needs"] == "build"
     assert [use.split("@")[0] for use in uses] == ["actions/download-artifact", "pypa/gh-action-pypi-publish"]
     assert workflow["jobs"]["build"]["permissions"] == {"contents": "read"}  # No id-token in the build job.
+
+
+def test_every_action_is_pinned_to_a_commit_sha_with_its_version():
+    for path in (ROOT / "action.yml", *sorted((ROOT / ".github" / "workflows").glob("*.yml"))):
+        for line in path.read_text().splitlines():
+            if line.lstrip("- ").startswith("uses:"):
+                assert re.search(r"uses: [\w.-]+/[\w./-]+@[0-9a-f]{40} # v\d+(\.\d+)*$", line), f"{path.name}: {line}"
 
 
 def test_release_build_gates_the_upload_on_the_checks_and_the_tag_version():

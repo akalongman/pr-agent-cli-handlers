@@ -103,3 +103,12 @@ async def test_contract_runs_the_agy_binary_in_its_workdir(monkeypatch, fake_cli
     assert recorded["argv"] == handler.build_command("gemini-3.8-flash-high", "SYS", "USER").argv[1:]
     assert json.loads(recorded["stdin"]) == {"event": "user", "message": {"content": "SYS\n\nUSER"}}
     assert os.path.realpath(recorded["cwd"]) == os.path.realpath(handler.workdir)
+
+
+@pytest.mark.parametrize("response", ["", None, "  \n"])
+async def test_contract_raises_on_an_empty_answer(monkeypatch, fake_cli, response):
+    _install_settings(monkeypatch)
+    fake_cli("agy", _lines(_result(response=response)))
+
+    with pytest.raises(CliHandlerError, match="AgyAIHandler: agy returned an empty answer$"):
+        await AgyAIHandler().chat_completion(model="gemini-3.8-flash-high", system="SYS", user="USER")

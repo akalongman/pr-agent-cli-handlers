@@ -54,7 +54,7 @@ A follow-up comment argued for part 1 together with a `register_ai_handler` hook
 - **R5.** `PR_AGENT_CLI_HANDLER` selects the adapter: `claude_code` or `codex`, and `agy` once P3 passes. Any other value, or none, exits with status 2 before PR-Agent starts, listing the valid values.
 - **R6.** Handler settings come from the process environment only, never from PR-Agent's settings object, so a repository's `.pr_agent.toml` cannot reach them. See [Configuration](#configuration).
 - **R7.** A model name must match `^[A-Za-z0-9][A-Za-z0-9._:/@-]*$` before any adapter-specific check. PR-Agent lets a repository set `config.model`, including per directory.
-- **R8.** Every failure raises `CliHandlerError`: invalid configuration, launch (missing binary, permission, argument too long, NUL byte in an argument), timeout, non-zero exit and unparseable output. PR-Agent's fallback loop then moves to the next model.
+- **R8.** Every failure raises `CliHandlerError`: invalid configuration, launch (missing binary, permission, argument too long, NUL byte in an argument), timeout, non-zero exit, unparseable output and an empty answer (a successful run whose text is empty or only whitespace). PR-Agent's fallback loop then moves to the next model.
 - **R9.** The CLI process receives only an allowlisted environment. See [Child environment](#child-environment).
 - **R10.** Before returning a response, the handler replaces every occurrence of a credential value with `[REDACTED]`. Credential values are the values of the adapter's allowlisted credential variables, plus any variable in the parent environment whose name contains `TOKEN`, `KEY`, `SECRET` or `PASSWORD` (compared case-insensitively) and whose value is at least 8 characters long. This is defense in depth for adapters that keep tool access; it does not catch encoded or transformed secrets.
 - **R11.** No command-line argument exceeds 120,000 bytes. Adapters pass the user prompt on standard input, and the Claude Code adapter passes the system prompt through a file. The Codex adapter's system prompt still travels in argv as `developer_instructions` and is bounded by this limit.
@@ -186,7 +186,6 @@ Before `agy` becomes selectable, all of these must hold on a current release, fo
 - a verified way to stop tool use (untested leads: `--mode plan`, `--json-schema`)
 - a check that a user-level `~/.gemini/GEMINI.md` does not load
 - a check whether print mode applies the user's `~/.gemini` command allowlist
-- a `SUCCESS` result with an empty response raises `CliHandlerError`
 
 ### Child environment
 

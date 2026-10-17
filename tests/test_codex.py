@@ -206,3 +206,15 @@ async def test_contract_runs_the_codex_binary_with_the_built_command(monkeypatch
     assert (text, finish_reason) == ("looks good", "stop")
     assert recorded["argv"] == handler.build_command("gpt-6-astra", "SYS", "USER").argv[1:]
     assert recorded["stdin"] == "USER"
+
+
+@pytest.mark.parametrize("text", ["", "  \n"])
+async def test_contract_raises_on_an_empty_answer(monkeypatch, fake_cli, text):
+    _install_settings(monkeypatch)
+    fake_cli("codex", _events(
+        {"type": "item.completed", "item": {"id": "i1", "type": "agent_message", "text": text}},
+        {"type": "turn.completed", "usage": {"input_tokens": 12, "output_tokens": 0}},
+    ))
+
+    with pytest.raises(CliHandlerError, match="CodexAIHandler: codex returned an empty answer$"):
+        await CodexAIHandler().chat_completion(model="gpt-6-astra", system="SYS", user="USER")

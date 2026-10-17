@@ -466,6 +466,39 @@ async def test_models_that_are_not_a_tuple_of_strings_surface_as_cli_handler_err
         await _BadModelsParserAdapter(models).chat_completion(model="m", system="s", user="u")
 
 
+class _EmptyAnswerAdapter(_EchoAdapter):
+    def __init__(self, text, finish_reason="stop"):
+        super().__init__()
+        self.text = text
+        self.finish_reason = finish_reason
+
+    def parse_response(self, stdout):
+        return CliResponse(text=self.text, finish_reason=self.finish_reason)
+
+
+@pytest.mark.parametrize("text", ["", " ", "\n\n", "\t \n"])
+async def test_an_empty_answer_surfaces_as_cli_handler_error(monkeypatch, text):
+    _install_settings(monkeypatch)
+
+    with pytest.raises(CliHandlerError, match="_EmptyAnswerAdapter: echo-bin returned an empty answer$"):
+        await _EmptyAnswerAdapter(text).chat_completion(model="m", system="s", user="u")
+
+
+async def test_an_empty_answer_at_the_output_limit_says_so(monkeypatch):
+    _install_settings(monkeypatch)
+
+    with pytest.raises(CliHandlerError, match="returned an empty answer at the output limit$"):
+        await _EmptyAnswerAdapter("", finish_reason="length").chat_completion(model="m", system="s", user="u")
+
+
+async def test_an_answer_with_surrounding_whitespace_is_returned_unchanged(monkeypatch):
+    _install_settings(monkeypatch)
+
+    text, finish_reason = await _EmptyAnswerAdapter("  ok \n").chat_completion(model="m", system="s", user="u")
+
+    assert (text, finish_reason) == ("  ok \n", "stop")
+
+
 async def test_cli_handler_error_from_parse_response_propagates_unwrapped(monkeypatch):
     _install_settings(monkeypatch)
     reported = CliHandlerError("reported failure")

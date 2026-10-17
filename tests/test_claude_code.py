@@ -297,3 +297,20 @@ async def test_contract_passes_a_system_prompt_larger_than_one_argument_allows(m
     recorded = json.loads(record.read_text())
     assert recorded["system_prompt"] == system
     assert all(len(arg.encode("utf-8")) <= cli_module.MAX_ARGV_ELEMENT_BYTES for arg in recorded["argv"])
+
+
+@pytest.mark.parametrize("result", ["", None, "  \n"])
+async def test_contract_raises_on_an_empty_answer(monkeypatch, fake_cli, result):
+    _install_settings(monkeypatch)
+    fake_cli("claude", _success_payload(result=result))
+
+    with pytest.raises(CliHandlerError, match="ClaudeCodeAIHandler: claude returned an empty answer$"):
+        await ClaudeCodeAIHandler().chat_completion(model="claude-opus-5", system="SYS", user="USER")
+
+
+async def test_contract_names_the_output_limit_on_an_empty_answer(monkeypatch, fake_cli):
+    _install_settings(monkeypatch)
+    fake_cli("claude", _success_payload(result="", stop_reason="max_tokens"))
+
+    with pytest.raises(CliHandlerError, match="claude returned an empty answer at the output limit$"):
+        await ClaudeCodeAIHandler().chat_completion(model="claude-opus-5", system="SYS", user="USER")

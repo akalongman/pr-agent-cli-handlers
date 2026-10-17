@@ -189,6 +189,11 @@ class CliAIHandler(BaseAiHandler):
                 raise TypeError(f"parse_response returned {type(response.text).__name__} text, not str")
             if not isinstance(response.models, tuple) or not all(isinstance(m, str) for m in response.models):
                 raise TypeError(f"parse_response returned models as {response.models!r}, not a tuple of str")
+            # An empty answer fails here, so PR-Agent's fallback loop runs instead of a later parse error that
+            # names the wrong cause.
+            if not response.text.strip():
+                limit = " at the output limit" if response.finish_reason == "length" else ""
+                raise CliHandlerError(f"{type(self).__name__}: {command.argv[0]} returned an empty answer{limit}")
         except CliHandlerError as e:
             # Redact the message in place and re-raise the same object the adapter raised.
             e.args = tuple(redact(arg, secrets) if isinstance(arg, str) else arg for arg in e.args)

@@ -24,8 +24,8 @@ pr-agent-cli-handlers:
     - uv tool install --python 3.12 "pr-agent-cli-handlers${PACKAGE_VERSION:+==$PACKAGE_VERSION}"
     - |
       case "$PR_AGENT_CLI_HANDLER" in
-        claude_code) npm install -g "@anthropic-ai/claude-code@${CLI_VERSION:-2.1.280}" ;;
-        codex) npm install -g "@openai/codex@${CLI_VERSION:-0.156.1}" ;;
+        claude_code) npm install -g "@anthropic-ai/claude-code@${CLI_VERSION:-2.1.302}" ;;
+        codex) npm install -g "@openai/codex@${CLI_VERSION:-0.159.3}" ;;
         *) echo "unknown handler: $PR_AGENT_CLI_HANDLER" >&2; exit 2 ;;
       esac
     - export MR_URL="$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID"

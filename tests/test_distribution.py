@@ -9,7 +9,7 @@ import yaml
 from pr_agent_cli_handlers.environment import read_timeout
 
 ROOT = Path(__file__).resolve().parent.parent
-PINS = {"@anthropic-ai/claude-code": "2.1.280", "@openai/codex": "0.156.1"}
+PINS = {"@anthropic-ai/claude-code": "2.1.302", "@openai/codex": "0.159.3"}
 
 
 def test_action_is_a_composite_action_with_the_documented_inputs():

@@ -41,8 +41,8 @@ runs:
         CLI_VERSION: ${{ inputs.cli-version }}
       run: |
         case "$HANDLER" in
-          claude_code) npm install -g "@anthropic-ai/claude-code@${CLI_VERSION:-2.1.280}" ;;
-          codex) npm install -g "@openai/codex@${CLI_VERSION:-0.156.1}" ;;
+          claude_code) npm install -g "@anthropic-ai/claude-code@${CLI_VERSION:-2.1.302}" ;;
+          codex) npm install -g "@openai/codex@${CLI_VERSION:-0.159.3}" ;;
           *) echo "unknown handler: $HANDLER" >&2; exit 2 ;;
         esac
     - name: Run PR-Agent

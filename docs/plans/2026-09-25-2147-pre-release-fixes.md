@@ -4,7 +4,7 @@
 
 **Goal:** Raise `CliHandlerError` when a CLI returns an empty answer, stop the GitLab template from falling back to an OpenAI model, and document the PR-Agent settings a CLI job needs.
 
-**Architecture:** `chat_completion` in the base already validates what every adapter's `parse_response` returns, inside one guard; the empty-answer check joins that guard, so all three adapters (and any later one) raise the same way. The GitLab template gains one variable, and the README's Configuration section gains the guidance the spec already promises.
+**Architecture:** `chat_completion` in the base already validates what every adapter's `parse_response` returns, inside one guard; the empty-answer check joins that guard, so all three adapters (and any later one) raise the same way. `CliHandlerError` also subclasses PR-Agent's `FallbackEligibleError`, so `retry_with_fallback_models` moves to the next model on any handler failure. The GitLab template gains one variable, and the README's Configuration section gains the guidance the spec already promises.
 
 **Tech Stack:** Python 3.12, PR-Agent 0.48.0 (Dynaconf settings; the facts below were written against 0.46.0 and re-verified on 0.48.0 on 2026-10-17), pytest with pytest-asyncio (auto mode), uv 0.12.18, PyYAML in tests.
 
@@ -12,8 +12,10 @@
 
 ## Background (facts and decisions the tasks rely on)
 
-- Today each adapter returns an empty text as a success: Claude Code maps a missing or empty `result` to `""` (`claude_code.py`, `data.get("result") or ""`), Codex accepts an `agent_message` whose `text` is empty, and agy returns `result.get("response") or ""` for a `SUCCESS` status. PR-Agent then fails later on parsing the empty answer, with an error that names the wrong cause, and its fallback loop never runs. The spec's agy re-gate list (line 189) already requires "a `SUCCESS` result with an empty response raises `CliHandlerError`".
+- Today each adapter returns an empty text as a success: Claude Code maps a missing or empty `result` to `""` (`claude_code.py`, `data.get("result") or ""`), Codex accepts an `agent_message` whose `text` is empty, and agy returns `result.get("response") or ""` for a `SUCCESS` status. PR-Agent then fails later on parsing the empty answer, with an error that names the wrong cause (for `/review`, its own `FallbackEligibleError` saying the response held no review mapping, `pr_reviewer.py:1283`). The spec's agy re-gate list (line 189) already requires "a `SUCCESS` result with an empty response raises `CliHandlerError`".
 - Decision: the check lives in `CliAIHandler.chat_completion`, inside the existing parse guard, next to the checks that `response.text` is a `str` and `response.models` a tuple of `str`. One check covers the three adapters and any later adapter; each adapter keeps a contract test through its real output shape. Issue #3's "in all three adapters" is met by behavior, not by three copies of the check.
+- PR-Agent 0.48.0's `retry_with_fallback_models` (`pr_processing.py:855`) moves to the next model only on `openai.APIError`, `asyncio.TimeoutError` or `FallbackEligibleError` (`algo/token_budget.py`, a `ValueError` subclass) and re-raises anything else. `CliHandlerError` subclasses only `RuntimeError`, so since the 0.48 bump no handler failure (an empty answer, a timeout, a rejected model, a non-zero exit) reaches a fallback model, and R8's "PR-Agent's fallback loop then moves to the next model" does not hold. Found in Task 1's review and verified on 0.48.0 on 2026-10-17.
+- Decision (amended 2026-10-17): `CliHandlerError` also subclasses `FallbackEligibleError`, in its own commit after Task 1's first one (Step 8). R1 requires PR-Agent 0.48, where the class exists. A test drives `retry_with_fallback_models` itself, so CI fails if PR-Agent narrows the exceptions it falls back on. A configuration failure (a missing binary) is then retried once per fallback model before the job fails, which R8 already accepts.
 - An answer that is only whitespace is empty too. An answer with content keeps its surrounding whitespace: the check tests `text.strip()` but returns `text` unchanged.
 - PR-Agent 0.48.0 defaults `config.fallback_models` to `["gpt-5.6-terra"]`, which `ClaudeCodeAIHandler.map_model` rejects ("supports Claude models only"), so every failed primary call with the template's default handler fails twice.
 - Decision: the template sets `CONFIG__FALLBACK_MODELS: "[]"`, not a Claude model: the Codex handler checks no model name, so a Claude fallback would fail inside the Codex CLI for a user who switches the handler. `scripts/smoke` already exports the same value.
@@ -21,7 +23,7 @@
 - Decision: no `fallback-models` input on `action.yml`. A default set inside the composite action's step would override a caller's own `CONFIG__FALLBACK_MODELS`, and the README's action example already sets one.
 - PR-Agent 0.48.0 facts for the README: `config.ai_timeout` defaults to 120 seconds; `config.custom_model_max_tokens` defaults to -1, and `get_max_tokens` (`algo/token_budget.py`) raises for a model missing from `MAX_TOKENS` unless that setting is positive (`claude-sonnet-5`, `claude-opus-5` and `gpt-6-astra` are known; the alias `opus` is not). PR-Agent's console log goes to standard output.
 - The child environment allowlist (`environment.py:86`) is exact names only: base names, the adapter's names and `PR_AGENT_CLI_PASS_ENV`. A CLI switch such as `MAX_THINKING_TOKENS` is dropped unless listed there.
-- An effort passed as `--effort` in `PR_AGENT_CLI_EXTRA_ARGS` reaches the CLI, but `CliCommand.effort` records only the effort the adapter derived from `CONFIG__REASONING_EFFORT`, so the log line reads `(effort default)`.
+- An effort passed as `--effort` in `PR_AGENT_CLI_EXTRA_ARGS` reaches the CLI after the handler's own, but `CliCommand.effort` records only the effort the adapter derived from `CONFIG__REASONING_EFFORT`, which PR-Agent 0.48.0 defaults to `medium` (`configuration.toml:111`), so the log line names the configured effort, not the one in the extra arguments. (Amended 2026-10-17 after Task 2's review; the first version said the line reads `(effort default)`.)
 - `CHANGELOG.md` stays unchanged: both fixes land inside 0.1.0, whose entries already cover the handlers and the template.
 
 ## Global Constraints
@@ -42,6 +44,7 @@
 3. An empty answer cut off at the output limit must say so, since the remedy differs. Pinned in Task 1 (`test_an_empty_answer_at_the_output_limit_says_so`, `test_contract_names_the_output_limit_on_an_empty_answer`).
 4. Each adapter's real empty shapes must raise through `chat_completion`: Claude `result` empty or `null`, Codex an empty `agent_message`, agy `SUCCESS` with an empty or `null` response. Pinned in Task 1 (`test_contract_raises_on_an_empty_answer` in each adapter's test file).
 5. The template's fallback value must reach PR-Agent as an empty list, not as the string `"[]"`. Pinned in Task 2 (`test_gitlab_template_passes_an_empty_fallback_list_to_pr_agent`).
+6. A `CliHandlerError` from the first model must move PR-Agent's `retry_with_fallback_models` to the next model. Pinned in Task 1 Step 8 (`tests/test_errors.py`).
 
 ---
 
@@ -51,10 +54,12 @@
 - Modify: `src/pr_agent_cli_handlers/base.py` (`chat_completion`, the parse guard)
 - Test: `tests/test_base.py`, `tests/test_claude_code.py`, `tests/test_codex.py`, `tests/test_agy.py`
 - Modify: `docs/specs/2026-09-23-1630-pr-agent-cli-handlers-design.md` (R8, the agy re-gate list)
+- Modify: `src/pr_agent_cli_handlers/errors.py` (Step 8, amended 2026-10-17)
+- Test: `tests/test_errors.py` (Step 8, new)
 
 **Interfaces:**
 - Consumes: nothing new. The existing test helpers `_EchoAdapter` and `_install_settings` (`tests/test_base.py`), `_success_payload` (`tests/test_claude_code.py`), `_events` (`tests/test_codex.py`), `_lines` and `_result` (`tests/test_agy.py`), and the `fake_cli` fixture (`tests/conftest.py`).
-- Produces: `chat_completion` raises `CliHandlerError("<AdapterClass>: <argv[0]> returned an empty answer")` when `response.text.strip()` is empty, with ` at the output limit` appended when `response.finish_reason == "length"`. Task 2 relies on nothing from this task.
+- Produces: `chat_completion` raises `CliHandlerError("<AdapterClass>: <argv[0]> returned an empty answer")` when `response.text.strip()` is empty, with ` at the output limit` appended when `response.finish_reason == "length"`. After Step 8, `CliHandlerError` is also a `pr_agent.algo.token_budget.FallbackEligibleError`. Task 2 relies on nothing from this task.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -184,6 +189,19 @@ Expected: lock unchanged, all tests pass (one pre-existing PR-Agent Pydantic war
 git add src/pr_agent_cli_handlers/base.py tests/test_base.py tests/test_claude_code.py tests/test_codex.py tests/test_agy.py docs/specs/2026-09-23-1630-pr-agent-cli-handlers-design.md && git commit -m "fix: raise CliHandlerError when a CLI returns an empty answer" -m "Closes #3" -- src/pr_agent_cli_handlers/base.py tests/test_base.py tests/test_claude_code.py tests/test_codex.py tests/test_agy.py docs/specs/2026-09-23-1630-pr-agent-cli-handlers-design.md
 ```
 
+- [ ] **Step 8 (amended 2026-10-17): Make `CliHandlerError` fallback-eligible**
+
+1. Write `tests/test_errors.py` first: a test that runs PR-Agent's `retry_with_fallback_models` with `config.model` and one `config.fallback_models` entry set, and a callable that raises `CliHandlerError` for the first model and returns a value for the second, and asserts that the second model's value comes back. Restore any settings the test changes. Run it and confirm it fails because the `CliHandlerError` propagates.
+2. In `src/pr_agent_cli_handlers/errors.py`, declare `class CliHandlerError(RuntimeError, FallbackEligibleError)`, importing `FallbackEligibleError` from `pr_agent.algo.token_budget`. Keep the module and class docstrings concise, imperative and true.
+3. In `src/pr_agent_cli_handlers/base.py`, reword the Step 3 comment imperatively: `# Fail an empty answer here, so PR-Agent's fallback loop runs instead of a later parse error that names the wrong cause.`
+4. In the spec's R8 line, replace `PR-Agent's fallback loop then moves to the next model.` with `` `CliHandlerError` subclasses PR-Agent's `FallbackEligibleError`, so PR-Agent's fallback loop then moves to the next model.``
+5. Run the full gate: `uv lock --check && uv run --locked pytest -q && uv run --locked ruff check`.
+6. Commit separately:
+
+```bash
+git add src/pr_agent_cli_handlers/errors.py src/pr_agent_cli_handlers/base.py tests/test_errors.py docs/specs/2026-09-23-1630-pr-agent-cli-handlers-design.md && git commit -m "fix: let PR-Agent fall back to the next model on CliHandlerError" -- src/pr_agent_cli_handlers/errors.py src/pr_agent_cli_handlers/base.py tests/test_errors.py docs/specs/2026-09-23-1630-pr-agent-cli-handlers-design.md
+```
+
 ### Task 2: GitLab template fallback and CLI job settings in the README
 
 **Files:**
@@ -275,9 +293,10 @@ The model, fallback models and reasoning effort come from PR-Agent's own setting
   none. The GitLab template sets `[]`.
 - A model PR-Agent does not know, such as the alias `opus`, needs `CONFIG__CUSTOM_MODEL_MAX_TOKENS` set to a
   positive token count, or PR-Agent refuses it.
-- Set the effort with `CONFIG__REASONING_EFFORT`, not `--effort` in `PR_AGENT_CLI_EXTRA_ARGS`. The handler passes
-  the configured effort and names it in its log line, `AI response from <model> (effort <effort>)`, which PR-Agent
-  prints to standard output; an effort in the extra arguments reaches the CLI, but the line reports `default`.
+- Set the effort with `CONFIG__REASONING_EFFORT`, not `--effort` in `PR_AGENT_CLI_EXTRA_ARGS`. When the CLI
+  accepts the configured effort, which defaults to PR-Agent's `medium`, the handler passes it and names it in its
+  log line, `AI response from <model> (effort <effort>)`, which PR-Agent prints to standard output. An effort in
+  the extra arguments also reaches the CLI, after the handler's own, but the line still names the configured effort.
 - PR-Agent's default `config.ai_timeout` is 120 seconds. A CLI call adds process start-up and reasoning time, so a
   large `improve` run can reach it and fail; `PR_AGENT_CLI_TIMEOUT=300` is a reasonable start.
 - The CLI receives an allowlisted environment (see Security), which also drops the CLIs' own switches, such as

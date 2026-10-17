@@ -1,4 +1,7 @@
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -27,6 +30,19 @@ def test_gitlab_template_runs_on_merge_request_pipelines():
         assert f'pr-agent-cli-handlers --pr_url="$MR_URL" {command}' in script
 
 
+def test_gitlab_template_passes_an_empty_fallback_list_to_pr_agent():
+    job = yaml.safe_load((ROOT / "templates" / "gitlab-ci.yml").read_text())["pr-agent-cli-handlers"]
+    env = {**os.environ, "LITELLM_LOCAL_MODEL_COST_MAP": "True",
+           "CONFIG__FALLBACK_MODELS": job["variables"]["CONFIG__FALLBACK_MODELS"]}
+    # PR-Agent splits a fallback value that is not a list on commas, so the string "[]" would become a model.
+    script = ("from pr_agent.config_loader import get_settings; "
+              "value = get_settings().config.fallback_models; print(isinstance(value, list), len(value))")
+
+    result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, check=True)
+
+    assert result.stdout.split()[-2:] == ["True", "0"]
+
+
 def test_action_and_template_pin_the_same_cli_versions():
     for path in (ROOT / "action.yml", ROOT / "templates" / "gitlab-ci.yml"):
         text = path.read_text()
@@ -39,6 +55,13 @@ def test_readme_documents_every_environment_variable_and_handler():
     for name in ("PR_AGENT_CLI_HANDLER", "PR_AGENT_CLI_BINARY", "PR_AGENT_CLI_EXTRA_ARGS", "PR_AGENT_CLI_TIMEOUT",
                  "PR_AGENT_CLI_PASS_ENV", "claude_code", "codex"):
         assert name in readme
+
+
+def test_readme_documents_the_pr_agent_settings_a_cli_job_needs():
+    readme = (ROOT / "README.md").read_text()
+    for text in ("CONFIG__FALLBACK_MODELS", "CONFIG__CUSTOM_MODEL_MAX_TOKENS", "CONFIG__REASONING_EFFORT",
+                 "PR_AGENT_CLI_TIMEOUT=300", "MAX_THINKING_TOKENS"):
+        assert text in readme, text
 
 
 def _workflow(name):

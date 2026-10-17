@@ -62,10 +62,24 @@ Handler settings come from environment variables only, so a repository's `.pr_ag
 | `PR_AGENT_CLI_BINARY` | CLI executable name or path | `claude` or `codex` |
 | `PR_AGENT_CLI_EXTRA_ARGS` | extra CLI arguments, split like shell words | empty |
 | `PR_AGENT_CLI_TIMEOUT` | seconds per call, a positive number | PR-Agent's `config.ai_timeout` |
-| `PR_AGENT_CLI_PASS_ENV` | comma-separated names of extra environment variables to pass to the CLI | empty |
+| `PR_AGENT_CLI_PASS_ENV` | comma-separated names of extra environment variables to pass to the CLI, including the CLI's own switches | empty |
 
 The model, fallback models and reasoning effort come from PR-Agent's own settings (`CONFIG__MODEL`,
 `CONFIG__FALLBACK_MODELS`, `CONFIG__REASONING_EFFORT`).
+
+- Fallback models must be models the selected CLI accepts. PR-Agent's default fallback is an OpenAI model, which
+  the `claude_code` handler rejects, so set `CONFIG__FALLBACK_MODELS` to models the CLI accepts, or to `[]` for
+  none. The GitLab template sets `[]`.
+- A model PR-Agent does not know, such as the alias `opus`, needs `CONFIG__CUSTOM_MODEL_MAX_TOKENS` set to a
+  positive token count, or PR-Agent refuses it.
+- Set the effort with `CONFIG__REASONING_EFFORT`, not `--effort` in `PR_AGENT_CLI_EXTRA_ARGS`. The handler passes
+  the configured effort and names it in its log line, `AI response from <model> (effort <effort>)`, which PR-Agent
+  prints to standard output; an effort in the extra arguments reaches the CLI, but the line reports `default`.
+- PR-Agent's default `config.ai_timeout` is 120 seconds. A CLI call adds process start-up and reasoning time, so a
+  large `improve` run can reach it and fail; `PR_AGENT_CLI_TIMEOUT=300` is a reasonable start.
+- The CLI receives an allowlisted environment (see Security), which also drops the CLIs' own switches, such as
+  `DISABLE_TELEMETRY`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS` or `MAX_THINKING_TOKENS`. Name each one you set in
+  `PR_AGENT_CLI_PASS_ENV`, or the CLI never sees it.
 
 The command keeps PR-Agent's exit semantics: a failed `review`, `describe` or `improve` still exits with
 status 0. A CI job that must fail when a review fails sets `CONFIG__PROPAGATE_TOOL_ERRORS=true`, in the action

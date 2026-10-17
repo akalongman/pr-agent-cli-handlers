@@ -9,6 +9,9 @@ pr-agent-cli-handlers:
   variables:
     PR_AGENT_CLI_HANDLER: claude_code
     CONFIG__MODEL: claude-sonnet-5
+    # PR-Agent's default fallback is an OpenAI model, which the claude_code handler rejects. List fallbacks the
+    # selected CLI accepts, or none.
+    CONFIG__FALLBACK_MODELS: "[]"
     CLI_VERSION: ""
     PACKAGE_VERSION: ""
   rules:

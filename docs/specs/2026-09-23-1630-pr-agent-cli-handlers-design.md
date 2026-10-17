@@ -211,7 +211,7 @@ Everything else is dropped: the git provider tokens PR-Agent uses (`GITHUB_TOKEN
   4. run `pr-agent-cli-handlers action`
 
   Inputs: handler, CLI version, model. Credentials come from secrets through `env`. The documented triggers are `pull_request` and `issue_comment`, so fork pull requests receive no secrets and are skipped. `pull_request_target` is documented as an explicit opt-in: the action never checks out pull request code, but a fork's diff can still carry prompt-injection text.
-- **GitLab pipelines.** A versioned template (`templates/gitlab-ci.yml`), usable with `include: remote:` or copied. It runs on `node:24-trixie` for `merge_request_event` (Node for the npm-installed CLIs), installs uv, which provides Python 3.12, then installs the package and the selected CLI, and runs `describe`, `review` and `improve` against `$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID`, exactly as PR-Agent's own pipeline mode does.
+- **GitLab pipelines.** A versioned template (`templates/gitlab-ci.yml`), usable with `include: remote:` or copied. It runs on `node:24-trixie` for `merge_request_event` (Node for the npm-installed CLIs), installs uv, which provides Python 3.12, then installs the package and the selected CLI, and runs `describe`, `review` and `improve` against `$CI_MERGE_REQUEST_PROJECT_URL/merge_requests/$CI_MERGE_REQUEST_IID`, exactly as PR-Agent's own pipeline mode does. It sets `CONFIG__FALLBACK_MODELS` to `[]`, since PR-Agent's default fallback is an OpenAI model that the default `claude_code` handler rejects.
 
 ### Credentials and compliance
 

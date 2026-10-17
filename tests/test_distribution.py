@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from pr_agent_cli_handlers.environment import read_timeout
+
 ROOT = Path(__file__).resolve().parent.parent
 PINS = {"@anthropic-ai/claude-code": "2.1.280", "@openai/codex": "0.156.1"}
 
@@ -41,6 +43,12 @@ def test_gitlab_template_passes_an_empty_fallback_list_to_pr_agent():
     result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, check=True)
 
     assert result.stdout.split()[-2:] == ["True", "0"]
+
+
+def test_gitlab_template_gives_the_cli_more_time_than_pr_agent_default():
+    job = yaml.safe_load((ROOT / "templates" / "gitlab-ci.yml").read_text())["pr-agent-cli-handlers"]
+
+    assert read_timeout({"PR_AGENT_CLI_TIMEOUT": job["variables"]["PR_AGENT_CLI_TIMEOUT"]}, 120) == 300
 
 
 def test_action_and_template_pin_the_same_cli_versions():

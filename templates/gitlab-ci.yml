@@ -12,6 +12,8 @@ pr-agent-cli-handlers:
     # PR-Agent's default fallback is an OpenAI model, which the claude_code handler rejects. List fallbacks the
     # selected CLI accepts, or none.
     CONFIG__FALLBACK_MODELS: "[]"
+    # PR-Agent's 120-second config.ai_timeout is too short for a large improve run through a CLI.
+    PR_AGENT_CLI_TIMEOUT: "300"
     CLI_VERSION: ""
     PACKAGE_VERSION: ""
   rules:

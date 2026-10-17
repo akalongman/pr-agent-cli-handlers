@@ -77,7 +77,8 @@ The model, fallback models and reasoning effort come from PR-Agent's own setting
   log line, `AI response from <model> (effort <effort>)`, which PR-Agent prints to standard output. An effort in
   the extra arguments also reaches the CLI, after the handler's own, but the line still names the configured effort.
 - PR-Agent's default `config.ai_timeout` is 120 seconds. A CLI call adds process start-up and reasoning time, so a
-  large `improve` run can reach it and fail; `PR_AGENT_CLI_TIMEOUT=300` is a reasonable start.
+  large `improve` run can reach it and fail; `PR_AGENT_CLI_TIMEOUT=300` is a reasonable start. The GitLab template
+  and the GitHub Actions example set it.
 - The CLI receives an allowlisted environment (see Security), which also drops the CLIs' own switches, such as
   `DISABLE_TELEMETRY`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS` or `MAX_THINKING_TOKENS`. Name each one you set in
   `PR_AGENT_CLI_PASS_ENV`, or the CLI never sees it.
@@ -140,6 +141,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CONFIG__FALLBACK_MODELS: '["claude-opus-5"]'
+          PR_AGENT_CLI_TIMEOUT: "300"
 ```
 
 For a repository where every run is your own, `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` can replace

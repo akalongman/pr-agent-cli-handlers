@@ -23,6 +23,6 @@ jobs:
           python-version: "3.12"
           enable-cache: false
       - run: uv sync
-      - run: uv pip install --reinstall "pr-agent @ git+https://github.com/The-PR-Agent/pr-agent@main"
+      - run: uv pip install --reinstall "pr-agent[github,gitlab] @ git+https://github.com/The-PR-Agent/pr-agent@main"
       - run: uv run --no-sync python -m pr_agent_cli_handlers.seam_scan
       - run: uv run --no-sync pytest -q

@@ -19,7 +19,10 @@ has the constructors it relies on.
 
 ## Install
 
-The CLI you choose must be installed and logged in on the same machine.
+The CLI you choose must be installed and logged in on the same machine. The package requires PR-Agent 0.48 or
+later and installs it with the `github` and `gitlab` extras, which 0.48 split out of the core install. For another
+git provider, add its extra when you install: `uv tool install pr-agent-cli-handlers --with 'pr-agent[bitbucket]'`
+or `pipx inject pr-agent-cli-handlers 'pr-agent[bitbucket]'`.
 
 | Platform | Install this package | Claude Code CLI | Codex CLI |
 |---|---|---|---|

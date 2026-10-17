@@ -10,7 +10,7 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.12"
 authors = [{ name = "Avtandil Kikabidze", email = "akalongman@gmail.com" }]
-dependencies = ["pr-agent>=0.46"]
+dependencies = ["pr-agent[github,gitlab]>=0.48,<1"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",

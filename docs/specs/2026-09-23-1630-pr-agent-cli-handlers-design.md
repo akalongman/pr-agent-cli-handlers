@@ -47,7 +47,7 @@ A follow-up comment argued for part 1 together with a `register_ai_handler` hook
 
 ## Requirements
 
-- **R1.** The package is `pr-agent-cli-handlers`, MIT-licensed, for Python 3.12 and later. Its only runtime dependency is `pr-agent>=0.46`, with no upper bound.
+- **R1.** The package is `pr-agent-cli-handlers`, MIT-licensed, for Python 3.12 and later. Its only runtime dependency is `pr-agent[github,gitlab]>=0.48,<1`: 0.48.0 moved the git provider SDKs into extras, and v1 is expected to change how AI handlers are chosen (revised 2026-10-17 from `pr-agent>=0.46` with no upper bound).
 - **R2.** `pr-agent-cli-handlers [arguments]` behaves like `pr-agent [arguments]` with the selected CLI handler. `pr-agent-cli-handlers action` runs PR-Agent's GitHub Action runner with it.
 - **R3.** Activation replaces the `ai_handler` default of every constructor listed under [Activation](#activation), only inside the process the command starts.
 - **R4.** Before activation, a seam check exits with status 2 if `PRAgent`, `PRReviewer`, `PRDescription` or `PRCodeSuggestions` lacks an `ai_handler` parameter whose default is `LiteLLMAIHandler`. The message names the constructor and the installed PR-Agent version. The same condition on any other listed constructor logs a warning.
@@ -84,7 +84,7 @@ The command runs these steps in order:
 3. Replace that default in the function's `__defaults__` (or `__kwdefaults__`) with the selected adapter class.
 4. Call `pr_agent.cli.run()` for the CLI form, or `pr_agent.servers.github_action_runner.main()` for `action`.
 
-Constructors with an `ai_handler` default of `LiteLLMAIHandler` in PR-Agent 0.46.0, found by a syntax-tree scan:
+Constructors with an `ai_handler` default of `LiteLLMAIHandler` in PR-Agent 0.46.0, found by a syntax-tree scan (unchanged in 0.48.0, re-scanned 2026-10-17):
 
 | Module | Constructor | Seam check |
 |---|---|---|
@@ -300,7 +300,7 @@ Probes are short throwaway scripts run against real CLIs and logins before the i
 All read on 2026-09-23 unless noted.
 
 - [The-PR-Agent/pr-agent#3640](https://github.com/The-PR-Agent/pr-agent/issues/3640) (re-read 2026-10-17, after it was closed) and [Discussion #3147](https://github.com/The-PR-Agent/pr-agent/discussions/3147)
-- PR-Agent 0.46.0 on [PyPI](https://pypi.org/project/pr-agent/) and its source at tag `v0.46.0` (`1d01f24f`)
+- PR-Agent 0.46.0 on [PyPI](https://pypi.org/project/pr-agent/) and its source at tag `v0.46.0` (`1d01f24f`), and 0.48.0 installed and scanned on 2026-10-17
 - [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance) (re-read 2026-10-17), [Claude Code authentication](https://code.claude.com/docs/en/authentication) and [Claude Code GitHub Actions](https://code.claude.com/docs/en/github-actions) (both 2026-10-17)
 - [Codex authentication](https://developers.openai.com/codex/auth) (2026-10-17)
 - [Antigravity CLI headless mode](https://antigravity.google/docs/cli/headless/) and the [antigravity-cli issue tracker](https://github.com/google-antigravity/antigravity-cli/issues)

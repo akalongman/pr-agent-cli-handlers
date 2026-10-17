@@ -6,7 +6,7 @@
 
 **Architecture:** `chat_completion` in the base already validates what every adapter's `parse_response` returns, inside one guard; the empty-answer check joins that guard, so all three adapters (and any later one) raise the same way. The GitLab template gains one variable, and the README's Configuration section gains the guidance the spec already promises.
 
-**Tech Stack:** Python 3.12, PR-Agent 0.46.0 (Dynaconf settings), pytest with pytest-asyncio (auto mode), uv 0.12.18, PyYAML in tests.
+**Tech Stack:** Python 3.12, PR-Agent 0.48.0 (Dynaconf settings; the facts below were written against 0.46.0 and re-verified on 0.48.0 on 2026-10-17), pytest with pytest-asyncio (auto mode), uv 0.12.18, PyYAML in tests.
 
 **Spec:** `docs/specs/2026-09-23-1630-pr-agent-cli-handlers-design.md` (amended by Tasks 1 and 2), and GitHub issues #3, #1 and #2.
 
@@ -15,18 +15,18 @@
 - Today each adapter returns an empty text as a success: Claude Code maps a missing or empty `result` to `""` (`claude_code.py`, `data.get("result") or ""`), Codex accepts an `agent_message` whose `text` is empty, and agy returns `result.get("response") or ""` for a `SUCCESS` status. PR-Agent then fails later on parsing the empty answer, with an error that names the wrong cause, and its fallback loop never runs. The spec's agy re-gate list (line 189) already requires "a `SUCCESS` result with an empty response raises `CliHandlerError`".
 - Decision: the check lives in `CliAIHandler.chat_completion`, inside the existing parse guard, next to the checks that `response.text` is a `str` and `response.models` a tuple of `str`. One check covers the three adapters and any later adapter; each adapter keeps a contract test through its real output shape. Issue #3's "in all three adapters" is met by behavior, not by three copies of the check.
 - An answer that is only whitespace is empty too. An answer with content keeps its surrounding whitespace: the check tests `text.strip()` but returns `text` unchanged.
-- PR-Agent 0.46.0 defaults `config.fallback_models` to `["gpt-5.6-terra"]`, which `ClaudeCodeAIHandler.map_model` rejects ("supports Claude models only"), so every failed primary call with the template's default handler fails twice.
+- PR-Agent 0.48.0 defaults `config.fallback_models` to `["gpt-5.6-terra"]`, which `ClaudeCodeAIHandler.map_model` rejects ("supports Claude models only"), so every failed primary call with the template's default handler fails twice.
 - Decision: the template sets `CONFIG__FALLBACK_MODELS: "[]"`, not a Claude model: the Codex handler checks no model name, so a Claude fallback would fail inside the Codex CLI for a user who switches the handler. `scripts/smoke` already exports the same value.
-- PR-Agent reads `config.fallback_models` as a list only when Dynaconf parses the environment value: `pr_processing.py:695-698` splits a non-list value on commas, so an unparsed `"[]"` would become a model named `[]`. Verified 2026-09-25: `CONFIG__FALLBACK_MODELS='[]'` yields an empty Dynaconf `DataList`, which is a `list`.
+- PR-Agent reads `config.fallback_models` as a list only when Dynaconf parses the environment value: `pr_processing.py:884-887` (0.48.0; `695-698` in 0.46.0) splits a non-list value on commas, so an unparsed `"[]"` would become a model named `[]`. Verified 2026-09-25 and again 2026-10-17 on 0.48.0: `CONFIG__FALLBACK_MODELS='[]'` yields an empty Dynaconf `DataList`, which is a `list`.
 - Decision: no `fallback-models` input on `action.yml`. A default set inside the composite action's step would override a caller's own `CONFIG__FALLBACK_MODELS`, and the README's action example already sets one.
-- PR-Agent 0.46.0 facts for the README: `config.ai_timeout` defaults to 120 seconds; `config.custom_model_max_tokens` defaults to -1, and `get_max_tokens` (`algo/token_budget.py`) raises for a model missing from `MAX_TOKENS` unless that setting is positive (`claude-sonnet-5`, `claude-opus-5` and `gpt-6-astra` are known; the alias `opus` is not). PR-Agent's console log goes to standard output.
+- PR-Agent 0.48.0 facts for the README: `config.ai_timeout` defaults to 120 seconds; `config.custom_model_max_tokens` defaults to -1, and `get_max_tokens` (`algo/token_budget.py`) raises for a model missing from `MAX_TOKENS` unless that setting is positive (`claude-sonnet-5`, `claude-opus-5` and `gpt-6-astra` are known; the alias `opus` is not). PR-Agent's console log goes to standard output.
 - The child environment allowlist (`environment.py:86`) is exact names only: base names, the adapter's names and `PR_AGENT_CLI_PASS_ENV`. A CLI switch such as `MAX_THINKING_TOKENS` is dropped unless listed there.
 - An effort passed as `--effort` in `PR_AGENT_CLI_EXTRA_ARGS` reaches the CLI, but `CliCommand.effort` records only the effort the adapter derived from `CONFIG__REASONING_EFFORT`, so the log line reads `(effort default)`.
 - `CHANGELOG.md` stays unchanged: both fixes land inside 0.1.0, whose entries already cover the handlers and the template.
 
 ## Global Constraints
 
-- Python `>=3.12`. The only runtime dependency is `pr-agent>=0.46`, with no upper bound (R1).
+- Python `>=3.12`. The only runtime dependency is `pr-agent[github,gitlab]>=0.48,<1` (R1; the extras and the cap were added on 2026-10-17, after 0.48.0 moved the git provider SDKs into extras).
 - Environment variables, exactly: `PR_AGENT_CLI_HANDLER`, `PR_AGENT_CLI_BINARY`, `PR_AGENT_CLI_EXTRA_ARGS`, `PR_AGENT_CLI_TIMEOUT`, `PR_AGENT_CLI_PASS_ENV`. This plan adds none.
 - Every handler failure raises `CliHandlerError` (R8). No command-line argument exceeds 120,000 bytes (R11).
 - No automated test runs a real `claude`, `codex` or `agy` binary (R15).

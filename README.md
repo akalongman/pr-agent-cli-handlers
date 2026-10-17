@@ -72,9 +72,10 @@ The model, fallback models and reasoning effort come from PR-Agent's own setting
   none. The GitLab template sets `[]`.
 - A model PR-Agent does not know, such as the alias `opus`, needs `CONFIG__CUSTOM_MODEL_MAX_TOKENS` set to a
   positive token count, or PR-Agent refuses it.
-- Set the effort with `CONFIG__REASONING_EFFORT`, not `--effort` in `PR_AGENT_CLI_EXTRA_ARGS`. The handler passes
-  the configured effort and names it in its log line, `AI response from <model> (effort <effort>)`, which PR-Agent
-  prints to standard output; an effort in the extra arguments reaches the CLI, but the line reports `default`.
+- Set the effort with `CONFIG__REASONING_EFFORT`, not `--effort` in `PR_AGENT_CLI_EXTRA_ARGS`. When the CLI
+  accepts the configured effort, which defaults to PR-Agent's `medium`, the handler passes it and names it in its
+  log line, `AI response from <model> (effort <effort>)`, which PR-Agent prints to standard output. An effort in
+  the extra arguments also reaches the CLI, after the handler's own, but the line still names the configured effort.
 - PR-Agent's default `config.ai_timeout` is 120 seconds. A CLI call adds process start-up and reasoning time, so a
   large `improve` run can reach it and fail; `PR_AGENT_CLI_TIMEOUT=300` is a reasonable start.
 - The CLI receives an allowlisted environment (see Security), which also drops the CLIs' own switches, such as

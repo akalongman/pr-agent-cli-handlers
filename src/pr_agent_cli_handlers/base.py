@@ -189,7 +189,7 @@ class CliAIHandler(BaseAiHandler):
                 raise TypeError(f"parse_response returned {type(response.text).__name__} text, not str")
             if not isinstance(response.models, tuple) or not all(isinstance(m, str) for m in response.models):
                 raise TypeError(f"parse_response returned models as {response.models!r}, not a tuple of str")
-            # An empty answer fails here, so PR-Agent's fallback loop runs instead of a later parse error that
+            # Fail an empty answer here, so PR-Agent's fallback loop runs instead of a later parse error that
             # names the wrong cause.
             if not response.text.strip():
                 limit = " at the output limit" if response.finish_reason == "length" else ""

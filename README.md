@@ -1,8 +1,9 @@
 # pr-agent-cli-handlers
 
 Run [PR-Agent](https://github.com/The-PR-Agent/pr-agent) through a local agent CLI (the Claude Code CLI or the
-OpenAI Codex CLI) instead of LiteLLM API calls. Review pull requests and merge requests with a subscription you
-already have, or with an API key, locally or in your own CI, with no server and no fork of PR-Agent.
+OpenAI Codex CLI) instead of LiteLLM API calls. Review pull requests and merge requests with an API key, or, for
+your own runs, with the Claude Code or Codex subscription you already have, locally or in your own CI, with no
+server and no fork of PR-Agent.
 
 This project is not affiliated with Anthropic, OpenAI, Google or the PR-Agent maintainers. It runs each
 vendor's published CLI unmodified. It never reads or stores a credential and only passes allowlisted variables
@@ -69,15 +70,31 @@ step's `env` or the GitLab job's `variables`.
 
 ## Credentials
 
-| CLI | Subscription | API key |
-|---|---|---|
-| Claude Code | `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (Pro, Max, Team, Enterprise); tied to the person who created it | `ANTHROPIC_API_KEY`, or Bedrock and Vertex through their own variables |
-| Codex | ChatGPT login saved by `codex login`; in CI this is experimental | `OPENAI_API_KEY` or `CODEX_API_KEY` |
+API keys are the default. A subscription login is for runs made by the person who owns it, for example reviewing
+your own branch before you open the pull request. A subscription token cannot be scoped or capped the way an API
+key with a spending limit can, and both vendors say where they expect each kind of credential.
 
-Anthropic allows an end user to sign in to the unmodified Claude Code binary with their own subscription, and
-states that Pro and Max usage limits assume ordinary, individual usage. For shared or team repositories, use
-API keys with spending limits. See the
-[Claude Code legal and compliance page](https://code.claude.com/docs/en/legal-and-compliance).
+| CLI | API key (default) | Subscription |
+|---|---|---|
+| Claude Code | `ANTHROPIC_API_KEY`, or Bedrock and Vertex through their own variables | `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (Pro, Max, Team, Enterprise). Anthropic documents it for CI pipelines and scripts; it is tied to the subscription of the person who ran the command |
+| Codex | `OPENAI_API_KEY` or `CODEX_API_KEY` | `codex login` with a ChatGPT account. OpenAI documents it for automation only through Enterprise access tokens on trusted, private runners, or a copied `~/.codex/auth.json`, which "contains access tokens" and is to be treated like a password |
+
+**Anthropic.** The [Claude Code legal and compliance page](https://code.claude.com/docs/en/legal-and-compliance)
+(read 2026-10-17) says OAuth login "is designed to support ordinary use of Claude Code and other native Anthropic
+applications", that "advertised usage limits for Pro and Max plans assume ordinary, individual usage", and that
+developers "building products or services that interact with Claude's capabilities" should use API key
+authentication and may not "route requests through Free, Pro, or Max plan credentials on behalf of their users".
+The same page does not prevent "an end user from signing in to the unmodified Claude Code binary with their own
+Claude subscription", and Anthropic's [GitHub Actions page](https://code.claude.com/docs/en/github-actions)
+accepts `CLAUDE_CODE_OAUTH_TOKEN` while advising an API key for a secret shared across repositories, "since an
+OAuth token is tied to the subscription of the person who ran `claude setup-token`". This package runs the
+unmodified binary, never reads the token, and does not pay for or resell anyone's usage. Whether a given run is
+ordinary, individual usage of your own subscription is your judgment to make against those terms; Anthropic
+"reserves the right to take measures to enforce these restrictions and may do so without prior notice".
+
+**OpenAI.** The [Codex authentication page](https://developers.openai.com/codex/auth) (read 2026-10-17) says:
+"Use API key authentication for programmatic Codex CLI workflows, such as CI/CD jobs. Don't expose Codex execution
+in untrusted or public environments."
 
 ## GitHub Actions
 
@@ -103,9 +120,12 @@ jobs:
           model: claude-sonnet-5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CONFIG__FALLBACK_MODELS: '["claude-opus-5"]'
 ```
+
+For a repository where every run is your own, `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` can replace
+`ANTHROPIC_API_KEY`; see [Credentials](#credentials) before you do.
 
 The condition starts a run for a comment only on a pull request and only when the comment starts with `/`; an
 unknown slash command (a typo such as `/reviwe`) fails the run, unlike a failed review.
@@ -120,7 +140,7 @@ The action's own steps run on Node 24, so a self-hosted runner needs Actions Run
 
 Include `templates/gitlab-ci.yml` from a release tag, or copy its job, and set these masked CI/CD variables (and
 hidden, where GitLab offers it): `GITLAB_PERSONAL_ACCESS_TOKEN` and the CLI credential (for example
-`CLAUDE_CODE_OAUTH_TOKEN`). Protecting them is a trade-off: a merge request pipeline receives protected variables
+`ANTHROPIC_API_KEY`). Protecting them is a trade-off: a merge request pipeline receives protected variables
 only when the project allows merge request pipelines to access them and both source and target branches are
 protected, while an unprotected variable can be read by anyone who can push a branch, through a modified pipeline.
 Do not run parent-project pipelines for merge requests from forks while these variables are present.

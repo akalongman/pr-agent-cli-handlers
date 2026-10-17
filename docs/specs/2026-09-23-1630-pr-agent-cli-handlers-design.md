@@ -1,10 +1,10 @@
 # pr-agent-cli-handlers: design
 
-Status: draft for review. Date: 2026-09-23.
+Status: draft for review. Date: 2026-09-23. Credentials and compliance revised 2026-10-17.
 
 ## Summary
 
-`pr-agent-cli-handlers` is an add-on package for [PR-Agent](https://github.com/The-PR-Agent/pr-agent). It runs PR-Agent's tools through a local agent command-line tool (the Claude Code CLI or the OpenAI Codex CLI; an experimental adapter for the Antigravity CLI `agy` is included but not selectable) instead of LiteLLM API calls. A user can review pull requests and merge requests with a subscription they already pay for, or with an API key, locally or in their own CI, with no server and no fork of PR-Agent.
+`pr-agent-cli-handlers` is an add-on package for [PR-Agent](https://github.com/The-PR-Agent/pr-agent). It runs PR-Agent's tools through a local agent command-line tool (the Claude Code CLI or the OpenAI Codex CLI; an experimental adapter for the Antigravity CLI `agy` is included but not selectable) instead of LiteLLM API calls. A user can review pull requests and merge requests with an API key, or, for their own runs, with a subscription they already pay for, locally or in their own CI, with no server and no fork of PR-Agent.
 
 ## Background
 
@@ -15,7 +15,7 @@ Feature request [The-PR-Agent/pr-agent#3640](https://github.com/The-PR-Agent/pr-
 - Part 2 stays declined, following the maintainer's earlier decisions in #2193 and #2353.
 - Part 1 is on hold. Before v1 the project takes bug fixes and work aligned with what exists, and the agent-runtime RFC ([Discussion #3147](https://github.com/The-PR-Agent/pr-agent/discussions/3147)) may change how handlers are chosen.
 
-A follow-up comment argued for part 1 together with a `register_ai_handler` hook mirroring `register_git_provider`. It has no answer yet.
+A follow-up comment argued for part 1 together with a `register_ai_handler` hook mirroring `register_git_provider`. On 2026-10-16 the maintainer closed the issue as not planned, calling the subscription handlers "tricky legally" and declining them in the core code. Both parts now live only in this package.
 
 ### Landscape, checked 2026-09-23
 
@@ -216,19 +216,30 @@ Everything else is dropped: the git provider tokens PR-Agent uses (`GITHUB_TOKEN
 
 ### Credentials and compliance
 
-| CLI | Subscription | API key |
+API keys are the documented default. A subscription login is documented for runs made by the person who owns it, with the vendor's own words on where it is expected, so the reader can judge their case against the terms rather than against this package's summary of them.
+
+| CLI | API key (default) | Subscription |
 |---|---|---|
-| Claude Code | `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (Pro, Max, Team, Enterprise); tied to the person who created it | `ANTHROPIC_API_KEY`; Bedrock and Vertex through their own variables |
-| Codex | ChatGPT login saved by `codex login`, stored as a CI secret file; experimental until P5 | `OPENAI_API_KEY` or `CODEX_API_KEY` |
-| `agy` | cached Google-account login; experimental until P6 | `GEMINI_API_KEY` |
+| Claude Code | `ANTHROPIC_API_KEY`; Bedrock and Vertex through their own variables | `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` (Pro, Max, Team, Enterprise); documented by Anthropic for CI pipelines and scripts, tied to the subscription of the person who ran the command |
+| Codex | `OPENAI_API_KEY` or `CODEX_API_KEY` | `codex login` with a ChatGPT account; documented by OpenAI for automation only through Enterprise access tokens on trusted, private runners, or a copied `~/.codex/auth.json` treated like a password |
+| `agy` | `GEMINI_API_KEY` | cached Google-account login; experimental until P6 |
 
-Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/docs/en/legal-and-compliance) (read 2026-09-23) sets the rules the package follows by construction:
+Anthropic's [legal and compliance page for Claude Code](https://code.claude.com/docs/en/legal-and-compliance) (read 2026-09-23, re-read 2026-10-17) splits into rules the package satisfies by construction and rules only the user's own situation can satisfy.
 
-- It permits "an end user signing in to the unmodified Claude Code binary with their own Claude subscription". The package runs the published binary unmodified and leaves sign-in to Anthropic's own flow.
+By construction:
+
+- The page does not prevent "an end user from signing in to the unmodified Claude Code binary with their own Claude subscription". The package runs the published binary unmodified and leaves sign-in to Anthropic's own flow.
 - "Developers may not collect, store, or intermediate Claude.ai credentials or session tokens". The package never reads a credential. It only passes allowlisted variables through to the child process.
-- "Customers may not pay for, resell, or intermediate Claude usage on their end users' behalf". The package is self-hosted only, with no hosted mode.
-- "Advertised usage limits for Pro and Max plans assume ordinary, individual usage". The documentation recommends API keys with spending limits for shared or team repositories.
+- "Customers may not pay for, resell, or intermediate Claude usage on their end users' behalf". The package is self-hosted only, with no hosted mode, and bills nothing to anyone.
 - The Claude Code name and logo may not be part of a product name. The package name avoids it, and the documentation states that the project is not affiliated with Anthropic, OpenAI or Google.
+
+Left to the user, and said so in the README:
+
+- OAuth login "is designed to support ordinary use of Claude Code and other native Anthropic applications", and "advertised usage limits for Pro and Max plans assume ordinary, individual usage". A developer reviewing their own branch is the case the documentation describes; a team repository is not, and the documentation points it to API keys with spending limits.
+- Developers "building products or services that interact with Claude's capabilities" should use API key authentication and may not "route requests through Free, Pro, or Max plan credentials on behalf of their users". The package is such a product in the broad reading and a wrapper around the user's own binary and login in the narrow one. The page does not settle which applies, and "Anthropic reserves the right to take measures to enforce these restrictions and may do so without prior notice", so the README quotes both sentences and defaults every example to an API key.
+- Anthropic's own [GitHub Actions page](https://code.claude.com/docs/en/github-actions) accepts `CLAUDE_CODE_OAUTH_TOKEN` and advises an API key for a secret shared across repositories, "since an OAuth token is tied to the subscription of the person who ran `claude setup-token`". The README repeats that boundary.
+
+OpenAI's [Codex authentication page](https://developers.openai.com/codex/auth) (read 2026-10-17) says: "Use API key authentication for programmatic Codex CLI workflows, such as CI/CD jobs. Don't expose Codex execution in untrusted or public environments." ChatGPT login for automation appears only as Enterprise access tokens "intended for trusted scripts, schedulers, and private CI runners" and as a copied `auth.json` fallback for headless machines. The page does not use the word experimental, so the documentation no longer does either; it reports what OpenAI documents.
 
 ### Security model
 
@@ -280,17 +291,18 @@ Probes are short throwaway scripts run against real CLIs and logins before the i
 ## Risks
 
 - **Upstream refactors the constructors**, for example with the runtime from Discussion #3147. The seam check fails loudly and the weekly job warns a release ahead. The long-term fix is an upstream hook.
-- **Vendor terms change** for subscription use in automation. The package works with API keys regardless; the subscription paths are documented, not required.
+- **Vendor terms on subscription use.** Anthropic's terms already contain a sentence that can be read against a third-party tool routing requests through a subscription (see Credentials and compliance), and enforcement may come without notice and would fall on the user's account, not on the package. The package works with API keys regardless, every example defaults to one, and the subscription paths are documented, not required. The upstream maintainer declined the same handlers in core on 2026-10-16 for this reason.
 - **`agy` maturity:** open headless issues ([#548](https://github.com/google-antigravity/antigravity-cli/issues/548), and [#781](https://github.com/google-antigravity/antigravity-cli/issues/781) reporting credential leaks through shell output). The adapter becomes selectable only if P1 to P3 pass on a current release, and stays marked experimental. It failed P3 on 1.2.9.
 - **Output quality with CLI models:** PR-Agent's prompts were tuned against API models. The live smoke test checks that responses still parse; review quality is judged by use.
 
 ## Sources
 
-All read on 2026-09-23.
+All read on 2026-09-23 unless noted.
 
-- [The-PR-Agent/pr-agent#3640](https://github.com/The-PR-Agent/pr-agent/issues/3640) and [Discussion #3147](https://github.com/The-PR-Agent/pr-agent/discussions/3147)
+- [The-PR-Agent/pr-agent#3640](https://github.com/The-PR-Agent/pr-agent/issues/3640) (re-read 2026-10-17, after it was closed) and [Discussion #3147](https://github.com/The-PR-Agent/pr-agent/discussions/3147)
 - PR-Agent 0.46.0 on [PyPI](https://pypi.org/project/pr-agent/) and its source at tag `v0.46.0` (`1d01f24f`)
-- [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance)
+- [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance) (re-read 2026-10-17), [Claude Code authentication](https://code.claude.com/docs/en/authentication) and [Claude Code GitHub Actions](https://code.claude.com/docs/en/github-actions) (both 2026-10-17)
+- [Codex authentication](https://developers.openai.com/codex/auth) (2026-10-17)
 - [Antigravity CLI headless mode](https://antigravity.google/docs/cli/headless/) and the [antigravity-cli issue tracker](https://github.com/google-antigravity/antigravity-cli/issues)
 - [alibaba/open-code-review](https://github.com/alibaba/open-code-review), its [CI integration docs](https://github.com/alibaba/open-code-review/blob/main/pages/src/content/docs/en/integrations/ci.md) and [delegation mode docs](https://github.com/alibaba/open-code-review/blob/main/pages/src/content/docs/en/integrations/delegate.md)
 - [Nikita-Filonov/ai-review](https://github.com/Nikita-Filonov/ai-review)

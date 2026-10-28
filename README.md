@@ -183,6 +183,7 @@ Do not run parent-project pipelines for merge requests from forks while these va
 
 - Webhook servers (GitHub App, GitLab webhook and the others) may work but are not tested yet.
 - MOSAICO is not supported: it calls LiteLLM directly.
+- `pr-agent-cli-handlers doctor` checks LiteLLM's API key and model, not the selected CLI.
 - The package includes an experimental adapter for the Antigravity CLI (`agy`) that is not selectable, because
   on agy 1.2.9 it failed the live gate (its reviews derail into tool use it cannot switch off).
 - With the Codex handler, PR-Agent's system prompt (including `extra_instructions`) must stay under about

@@ -41,6 +41,7 @@ A follow-up comment argued for part 1 together with a `register_ai_handler` hook
 
 - Webhook servers (GitHub App, GitLab webhook, Bitbucket, Azure DevOps, Gitea). They may work through the same activation, but the first release neither tests nor documents them.
 - MOSAICO. It calls LiteLLM directly (`pr_agent/mosaico/executor.py`).
+- `pr-agent doctor`. It checks LiteLLM's API key and model, not the selected CLI (`pr_agent/doctor.py`).
 - Agentic review. PR-Agent's prompts expect a plain completion, and the adapters keep tools off where the CLI allows it.
 - Hosted or multi-tenant operation.
 - Docker images. The package is installed at job start.
@@ -82,9 +83,10 @@ The command runs these steps in order:
 1. Read and validate `PR_AGENT_CLI_HANDLER` (R5) and the other handler variables (R6).
 2. Run the seam check (R4) over the constructors below. For each one, `inspect.signature` must show an `ai_handler` parameter whose default is `LiteLLMAIHandler`.
 3. Replace that default in the function's `__defaults__` (or `__kwdefaults__`) with the selected adapter class.
-4. Call `pr_agent.cli.run()` for the CLI form, or `pr_agent.servers.github_action_runner.main()` for `action`.
+4. For `action`, replace the runner's provider-key gate, `missing_provider_key_env_vars` (PR-Agent after 0.49.0), with one that never reports a missing key. The gate asks LiteLLM for the API key of the model's provider and stops the run without one, while the CLI resolves its own credentials (an OAuth token, a ChatGPT login, `CODEX_API_KEY`).
+5. Call `pr_agent.cli.run()` for the CLI form, or `pr_agent.servers.github_action_runner.main()` for `action`.
 
-Constructors with an `ai_handler` default of `LiteLLMAIHandler` in PR-Agent 0.46.0, found by a syntax-tree scan (unchanged in 0.48.0, re-scanned 2026-10-17):
+Constructors with an `ai_handler` default of `LiteLLMAIHandler` in PR-Agent 0.46.0, found by a syntax-tree scan (unchanged in 0.48.0 and 0.49.0, re-scanned 2026-10-28):
 
 | Module | Constructor | Seam check |
 |---|---|---|
@@ -100,7 +102,7 @@ Constructors with an `ai_handler` default of `LiteLLMAIHandler` in PR-Agent 0.46
 | `pr_agent/tools/pr_help_message.py` | `PRHelpMessage.__init__` | warning |
 | `pr_agent/tools/pr_help_docs.py` | `PRHelpDocs.__init__` | warning |
 
-Patching `PRAgent` alone is not enough. The GitHub Action runner's automatic runs construct `PRDescription(pr_url)`, `PRReviewer(pr_url)` and `PRCodeSuggestions(pr_url)` directly (`_run_auto_tool` in `pr_agent/servers/github_action_runner.py`), so those constructors' own defaults apply. The one direct construction, `LiteLLMAIHandler()` in `pr_agent/mosaico/executor.py`, is outside the supported surface.
+Patching `PRAgent` alone is not enough. The GitHub Action runner's automatic runs construct `PRDescription(pr_url)`, `PRReviewer(pr_url)` and `PRCodeSuggestions(pr_url)` directly (`_run_auto_tool` in `pr_agent/servers/github_action_runner.py`), so those constructors' own defaults apply. The direct constructions, `LiteLLMAIHandler()` in `pr_agent/mosaico/executor.py` and in `pr_agent/doctor.py` (the `doctor` command and the runner's key gate), are outside the supported surface.
 
 An explicit command was chosen over a `.pth` start-up hook. The hook would activate in every Python process of the environment and be invisible when debugging.
 
@@ -255,7 +257,7 @@ OpenAI's [Codex authentication page](https://developers.openai.com/codex/auth) (
 
 - **Unit tests** (pytest, no real CLI, R15):
   - the handler tests carried over from the branch, adjusted to environment variables
-  - activation: a real seam check on the installed PR-Agent; a clear exit on a stand-in class whose constructor lacks the default; default replacement on all listed constructors; argument pass-through to `pr_agent.cli.run`; exit before start on an invalid `PR_AGENT_CLI_HANDLER`
+  - activation: a real seam check on the installed PR-Agent; a clear exit on a stand-in class whose constructor lacks the default; default replacement on all listed constructors; argument pass-through to `pr_agent.cli.run`; exit before start on an invalid `PR_AGENT_CLI_HANDLER`; an `action` run on a pull request event that reaches the tools with only a CLI login
   - security: sentinel values in `GITHUB_TOKEN`, `GITLAB__PERSONAL_ACCESS_TOKEN`, `CI_JOB_TOKEN` and the other adapters' credential variables never reach the child environment, logs or error messages; the adapter's own credential variables do; a response containing a sentinel value is redacted; invalid model names are rejected
 - **Adapter contract tests:** a fake executable per CLI placed on `PATH` records its arguments, its standard input and the content of the file passed with `--system-prompt-file` while the call runs, and replays recorded output, including error envelopes and every `agy` status value.
 - **Live smoke test** (`scripts/smoke`, manual): runs `review` through each installed CLI against three small sample diffs in PR-Agent's plain-diff mode (`--diff-file`, with `--json-output` as the parse check). Run before every release.

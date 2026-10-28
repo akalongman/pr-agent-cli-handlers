@@ -7,6 +7,13 @@ from pr_agent_cli_handlers.activation import ActivationError, activate, select_h
 from pr_agent_cli_handlers.errors import CliHandlerError
 
 PROG = "pr-agent-cli-handlers"
+# The GitHub Action runner's check for the model provider's API key.
+KEY_GATE = "missing_provider_key_env_vars"
+
+
+def _no_missing_key(*args, **kwargs) -> None:
+    """Return None, the gate's verdict for a run that may proceed."""
+    return None
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -24,6 +31,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args[:1] == ["action"]:
         from pr_agent.servers import github_action_runner
 
+        if hasattr(github_action_runner, KEY_GATE):
+            # The runner stops when LiteLLM finds no provider key (PR-Agent after 0.49.0). The CLI resolves its own
+            # credentials, so let the run decide, as the runner does for keyless providers.
+            setattr(github_action_runner, KEY_GATE, _no_missing_key)
         github_action_runner.main()
         return 0
     from pr_agent import cli as pr_agent_cli

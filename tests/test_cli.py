@@ -1,6 +1,9 @@
+import copy
 import inspect
+import json
 
 import pr_agent.cli as pr_agent_cli
+import pr_agent.config_loader as config_loader
 import pr_agent.servers.github_action_runner as github_action_runner
 from pr_agent.agent.pr_agent import PRAgent
 from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
@@ -56,3 +59,40 @@ def test_main_action_runs_the_github_action_runner(monkeypatch, restore_seams):
 
     assert main(["action"]) == 0
     assert calls == [ClaudeCodeAIHandler]
+
+
+def test_main_action_runs_the_tools_with_a_cli_login_and_no_provider_api_key(monkeypatch, tmp_path, restore_seams):
+    """PR-Agent after 0.49.0 stops the runner when LiteLLM finds no key for the model's provider; the weekly
+    upstream-main job runs this test against that code."""
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"action": "opened", "pull_request": {
+        "html_url": "https://github.com/owner/repo/pull/1",
+        "url": "https://api.github.com/repos/owner/repo/pulls/1"}}), encoding="utf-8")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    monkeypatch.setenv("GITHUB_TOKEN", "github-token-value")
+    monkeypatch.setenv("PR_AGENT_CLI_HANDLER", "claude_code")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-token-value")
+    # The runner writes settings as it goes; give it a copy, as PR-Agent's GitHub App does per request.
+    settings = copy.deepcopy(config_loader.global_settings)
+    settings.set("config.model", "anthropic/claude-sonnet-5")  # the prefix names the provider, not LiteLLM's map
+    monkeypatch.setattr(config_loader, "global_settings", settings)
+    monkeypatch.setattr(github_action_runner, "setup_logger", lambda *args, **kwargs: None)
+    monkeypatch.setattr(github_action_runner, "apply_repo_settings", lambda pr_url: None)
+    ran = []
+
+    def tool(name):
+        class Tool:
+            def __init__(self, pr_url):
+                pass
+
+            async def run(self):
+                ran.append(name)
+
+        return Tool
+
+    for name in ("PRDescription", "PRReviewer", "PRCodeSuggestions"):
+        monkeypatch.setattr(github_action_runner, name, tool(name))
+
+    assert main(["action"]) == 0
+    assert ran == ["PRDescription", "PRReviewer", "PRCodeSuggestions"]

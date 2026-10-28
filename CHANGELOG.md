@@ -7,5 +7,7 @@
 - Read handler settings from `PR_AGENT_CLI_*` environment variables only.
 - Pass each CLI an allowlisted environment and redact credential values from its output.
 - Add the `pr-agent-cli-handlers` command, a composite GitHub Action and a GitLab pipeline template.
+- Let the GitHub Action run with a CLI login and no provider API key, past the LiteLLM key check PR-Agent's
+  runner gains after 0.49.0.
 - Pass Claude Code's system prompt through a private file, so long instructions fit and stay out of the process list.
 - Log the model and reasoning effort of each CLI call, and file its cost under the model the CLI reports.

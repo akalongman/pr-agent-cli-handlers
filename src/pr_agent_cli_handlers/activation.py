@@ -36,7 +36,7 @@ SEAMS = (
     Seam("pr_agent.tools.pr_help_docs", "PRHelpDocs", False),
 )
 # Construct LiteLLMAIHandler() directly in these files; they stay outside the supported surface.
-DIRECT_CONSTRUCTIONS = ("pr_agent/mosaico/executor.py",)
+DIRECT_CONSTRUCTIONS = ("pr_agent/doctor.py", "pr_agent/mosaico/executor.py")
 
 HANDLERS = {
     "claude_code": ("pr_agent_cli_handlers.claude_code", "ClaudeCodeAIHandler"),

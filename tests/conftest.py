@@ -54,16 +54,22 @@ def fake_cli(tmp_path, monkeypatch):
 
 @pytest.fixture
 def restore_seams():
-    """Snapshot the ai_handler defaults activation may replace, and put them back after the test."""
+    """Snapshot the ai_handler defaults activation may replace and the Action runner's key gate cli.main may
+    replace, and put them back after the test."""
     import importlib
 
     from pr_agent_cli_handlers.activation import SEAMS
+    from pr_agent_cli_handlers.cli import KEY_GATE
 
     saved = []
     for seam in SEAMS:
         init = getattr(importlib.import_module(seam.module), seam.qualname).__init__
         saved.append((init, init.__defaults__, init.__kwdefaults__))
+    runner = importlib.import_module("pr_agent.servers.github_action_runner")
+    gate = getattr(runner, KEY_GATE, None)
     yield
     for init, defaults, kwdefaults in saved:
         init.__defaults__ = defaults
         init.__kwdefaults__ = kwdefaults
+    if gate is not None:
+        setattr(runner, KEY_GATE, gate)
